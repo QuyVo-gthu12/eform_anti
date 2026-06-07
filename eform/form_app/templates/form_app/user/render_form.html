@@ -1,0 +1,290 @@
+{% extends "form_app/user/base.html" %}
+{% load static %}
+
+{% block title %}{{ form_def.title }} - eForm{% endblock %}
+{% block page_title %}{{ form_def.title }}{% endblock %}
+
+{% block content %}
+<div>
+    <a href="{% url 'list_forms' %}" class="back-link">
+        <i class="fa fa-arrow-left"></i> Quay lại Tất cả Biểu mẫu
+    </a>
+</div>
+
+<div>
+    <!-- Màn hình chờ tải giao diện form -->
+    <div class="loading-overlay" id="loading-screen">
+        <div class="spinner-ring"></div>
+        <div class="loading-text">Đang khởi dựng giao diện biểu mẫu...</div>
+    </div>
+
+    <!-- ĐÃ SỬA ID: Nơi Form.io sẽ kết xuất giao diện để người dùng điền -->
+    <div id="formio-render-area"></div>
+</div> 
+
+<div class="toast-container" id="toast-container"></div>
+
+<!-- Nhúng JS Local Form.io -->
+<script src="{% static 'js/formio.full.min.js' %}"></script>
+
+<script>
+    // 1. Hàm hiển thị thông báo toast
+    function showNotification(message, type='success'){
+        const container = document.getElementById('toast-container');
+        if (!container) return; 
+        
+        const toast = document.createElement('div');
+        toast.className = `custom-toast ${type}`;
+
+        const iconClass = type === 'success' ? 'fa-check-circle' : 'fa-exclamation-circle';
+        
+        toast.innerHTML = `
+            <i class="fa ${iconClass} toast-icon"></i>
+            <span class="toast-message">${message}</span>
+        `;
+
+        container.appendChild(toast);
+        toast.offsetHeight;
+        toast.classList.add('show');
+
+        setTimeout(() => {
+            toast.classList.remove('show');
+            setTimeout(() => { toast.remove(); }, 350);
+        }, 3500);
+    }
+
+    document.addEventListener("DOMContentLoaded", function() {
+        // ĐĂNG KÝ CHẶN MẠNG NGẦM ĐỂ CHẠY LOCAL OFFLINE
+        if (window.Formio) {
+            Formio.setBaseUrl(window.location.origin + '/mock-formio');
+            Formio.setProjectUrl(window.location.origin + '/mock-formio/project/local');
+            Formio.loadProject = () => Promise.resolve({_id: "local", name: "local", setting: {} });
+            if (Formio.prototype) {
+                Formio.prototype.loadProject = () => Promise.resolve({ _id: "local", name: "local", setting: {} });
+                Formio.prototype.loadForm = () => Promise.resolve({ _id: "local", components: [] });
+                Formio.prototype.loadSubmission = () => Promise.resolve({ _id: "local", data: {} });
+            }
+
+            // Đánh lừa bộ lọc Request lõi của Form.io
+            const originalRequest = Formio.request;
+            Formio.request = function(url) {
+                if (url && (
+                    url.includes('form.io') || 
+                    url.includes('/project/') ||
+                    url.includes('/mock-formio') ||
+                    url.includes('/current') ||
+                    url.includes('/access') ||
+                    url.includes('undefined') // Chặn đứng lệnh gọi lỗi tự sinh
+                )) {
+                    return Promise.resolve({
+                        _id: "local", name: "local", title: "Local Offline",
+                        components: [], settings: {}, forms: [], resources: [], access: []
+                    });
+                }
+                return originalRequest.apply(this, arguments);
+            };
+        }
+
+        // ĐÃ SỬA CÚ PHÁP COMMENT: Đồng bộ chuẩn tên biến formSchema và schema_json_str từ Django View
+        let formSchema = {{ schema_json_str | safe }};
+        if (!formSchema || !formSchema.components) {
+            formSchema = { components: [] };
+        }
+
+        // ========================================================
+        // DEFERRED UPLOAD: Lưu file tạm vào bộ nhớ, chỉ upload
+        // lên MinIO sau khi user bấm nút Submit.
+        // ========================================================
+        const csrfToken = '{{ csrf_token }}';
+        const DJANGO_UPLOAD_URL = '/api/upload-file/';
+
+        // Map lưu trữ: tempBlobUrl -> { file, fileName }
+        const pendingFiles = new Map();
+
+        Formio.Providers.addProvider('storage', 'django', function(formio) {
+            return {
+                title: 'Django Backend',
+                name: 'django',
+
+                // Khi user chọn file: KHÔNG upload ngay, chỉ tạo blob URL tạm thời
+                uploadFile: function(file, fileName, dir, progressCallback, url, options, fileKey, groupPermissions, groupId, uploadStartCallback, abortCallback) {
+                    return new Promise(function(resolve) {
+                        const tempUrl = URL.createObjectURL(file);
+                        // Lưu file thật vào Map để sau này upload
+                        pendingFiles.set(tempUrl, { file: file, fileName: fileName });
+
+                        // Báo cáo progress 100% ngay lập tức (không cần chờ network)
+                        if (typeof uploadStartCallback === 'function') uploadStartCallback();
+                        if (typeof progressCallback === 'function') progressCallback(100);
+
+                        // Trả về metadata tạm, đánh dấu _pending = true
+                        resolve({
+                            storage: 'django',
+                            name: fileName,
+                            url: tempUrl,
+                            size: file.size,
+                            type: file.type,
+                            _pending: true  // Cờ hiệu: chưa upload lên server
+                        });
+                    });
+                },
+
+                downloadFile: function(file) {
+                    return Promise.resolve(file);
+                },
+
+                deleteFile: function(file) {
+                    // Dọn dẹp blob URL khi user xóa file trước khi submit
+                    if (file.url && pendingFiles.has(file.url)) {
+                        URL.revokeObjectURL(file.url);
+                        pendingFiles.delete(file.url);
+                    }
+                    return Promise.resolve(file);
+                }
+            };
+        });
+
+        // ÉP TẤT CẢ FILE COMPONENT DÙNG STORAGE 'django'
+        function patchFileComponents(components) {
+            if (!Array.isArray(components)) return;
+            components.forEach(function(c) {
+                if (c.type === 'file') {
+                    c.storage = 'django';
+                    c.url = DJANGO_UPLOAD_URL;
+                }
+                if (c.components) patchFileComponents(c.components);
+                if (c.columns)    c.columns.forEach(col => patchFileComponents(col.components));
+                if (c.rows)       c.rows.forEach(row => row.forEach(cell => patchFileComponents(cell.components)));
+            });
+        }
+        patchFileComponents(formSchema.components);
+
+        // ================================================================
+        // Upload thật lên MinIO: duyệt toàn bộ data, tìm file _pending,
+        // upload từng cái, thay URL tạm bằng URL MinIO thật.
+        // ================================================================
+        async function uploadPendingFiles(data) {
+            if (!data || typeof data !== 'object') return;
+
+            for (const key of Object.keys(data)) {
+                const value = data[key];
+
+                // Form.io lưu file dưới dạng mảng object
+                if (Array.isArray(value) && value.length > 0 && value[0] && value[0].storage === 'django') {
+                    for (let i = 0; i < value.length; i++) {
+                        const fileObj = value[i];
+                        if (!fileObj._pending) continue; // Bỏ qua nếu đã upload rồi
+
+                        const pending = pendingFiles.get(fileObj.url);
+                        if (!pending) continue;
+
+                        // Upload thật lên MinIO qua Django endpoint
+                        const formData = new FormData();
+                        formData.append('file', pending.file, pending.fileName);
+
+                        const response = await fetch(DJANGO_UPLOAD_URL, {
+                            method: 'POST',
+                            headers: {
+                                'X-CSRFToken': csrfToken,
+                                'X-Requested-With': 'XMLHttpRequest'
+                            },
+                            body: formData
+                        });
+
+                        if (!response.ok) {
+                            throw new Error(`Upload file "${pending.fileName}" thất bại (HTTP ${response.status}).`);
+                        }
+
+                        const result = await response.json();
+
+                        // Dọn dẹp blob URL
+                        URL.revokeObjectURL(fileObj.url);
+                        pendingFiles.delete(fileObj.url);
+
+                        // Ghi đè lên object trong mảng bằng dữ liệu thật từ server
+                        value[i] = {
+                            storage: 'django',
+                            name: result.name || pending.fileName,
+                            originalName: result.originalName || pending.fileName,
+                            url: result.url,
+                            size: result.size || pending.file.size,
+                            type: result.type || pending.file.type,
+                        };
+                    }
+                } else if (value && typeof value === 'object' && !Array.isArray(value)) {
+                    // Đệ quy vào object lồng nhau (datagrid, nested form...)
+                    await uploadPendingFiles(value);
+                } else if (Array.isArray(value)) {
+                    // Đệ quy vào từng phần tử của mảng (datagrid rows)
+                    for (const item of value) {
+                        if (item && typeof item === 'object') {
+                            await uploadPendingFiles(item);
+                        }
+                    }
+                }
+            }
+        }
+
+        // Khởi dựng Form.io
+        Formio.createForm(document.getElementById('formio-render-area'), formSchema, {
+            noDefaultSubmitButton: false,
+            buttonSettings: { showCancel: false },
+        })
+        .then(function(formInstance) {
+            const loader = document.getElementById('loading-screen');
+            if(loader) { loader.classList.add('hidden'); }
+
+            formInstance.nosubmit = true;
+
+            formInstance.on('submit', async function(submission) {
+                // Vô hiệu hoá nút submit để tránh double-click
+                const submitBtn = document.querySelector('#formio-render-area button[type="submit"]');
+                if (submitBtn) {
+                    submitBtn.disabled = true;
+                    submitBtn.textContent = 'Đang xử lý...';
+                }
+
+                try {
+                    // BƯỚC 1: Upload tất cả file đang pending lên MinIO
+                    await uploadPendingFiles(submission.data);
+
+                    // BƯỚC 2: Gửi toàn bộ submission (đã có URL thật) về Django
+                    const response = await fetch("{% url 'submit_form_api' form_def.id %}", {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRFToken': '{{ csrf_token }}'
+                        },
+                        body: JSON.stringify(submission.data)
+                    });
+
+                    if (!response.ok) throw new Error('Phản hồi từ máy chủ Django thất bại.');
+
+                    const data = await response.json();
+
+                    if (data.status === 'success') {
+                        showNotification('Bạn đã nộp biểu mẫu thành công!', 'success');
+                        formInstance.emit('submitDone', submission);
+                        setTimeout(() => {
+                            window.location.href = "{% url 'list_forms' %}";
+                        }, 2000);
+                    } else {
+                        showNotification('Có lỗi xảy ra: ' + data.message, 'error');
+                        formInstance.emit('submitError');
+                        if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'Nộp biểu mẫu'; }
+                    }
+                } catch(err) {
+                    console.error('Lỗi khi nộp biểu mẫu:', err);
+                    showNotification(err.message || 'Không thể kết nối đến máy chủ.', 'error');
+                    formInstance.emit('submitError');
+                    if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'Nộp biểu mẫu'; }
+                }
+            });
+        })
+        .catch(function(err) {
+            console.error('Lỗi khởi tạo Form.io Render:', err);
+            showNotification('Không thể hiển thị cấu trúc biểu mẫu này.', 'error');
+        });
+    });
+</script>
+{% endblock content %}

@@ -1,0 +1,79 @@
+{% load static %}
+
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}eForm{% endblock %}</title>
+    <link rel="stylesheet" href="{% static 'css/bootstrap.min.css' %}">
+    <link rel="stylesheet" href="{% static 'css/font-awesome.min.css' %}">
+    <link rel="stylesheet" href="{% static 'css/formio.full.min.css' %}">
+
+<link rel="stylesheet" href="{% static 'css/base.css' %}">
+
+
+</head>
+<body>
+
+<div class="layout">
+
+<!-- Sidebar -->
+<aside class="sidebar">
+
+    <div class="logo">
+        <h2>eForm</h2>
+    </div>
+
+    <nav class="menu">
+
+        <a href="{% url 'home' %}">
+            Home
+        </a>
+
+        <a href="{% url 'list_forms' %}">
+            All Forms
+        </a>
+
+        <a href="#">
+            Submit Form
+        </a>
+
+        <a href="#">
+            Approve Form
+        </a>
+
+    </nav>
+
+</aside>
+
+<!-- Main -->
+<main class="main-content">
+
+    <header class="topbar">
+
+        <div>
+            <h3>{% block page_title %}Dashboard{% endblock %}</h3>
+        </div>
+
+        <div class="user-info">
+            {{ request.user.username }}
+        </div>
+
+    </header>
+
+    <section class="content">
+
+        {% block content %}
+        {% endblock %}
+
+    </section>
+
+</main>
+
+
+</div>
+
+</body>
+</html>

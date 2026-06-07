@@ -1,0 +1,211 @@
+{% load static %}
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="utf-8">
+        <meta http-equiv="X-UA-Compatible" content="IE=edge">
+        <title>Design Form: {{ form_def.title }}</title>
+        <meta name="description" content="">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        
+        {% comment %} <script>
+            (function() {
+                const suppress = (args) => args.some(arg => {
+                    if (!arg) return false;
+                    const str = typeof arg === 'object' ? (arg.message || arg.toString() || '') : String(arg);
+                    return str.includes("Could not load project settings") || str.includes("Missing projectId");
+                });
+                const originalWarn = console.warn;
+                console.warn = function(...args) {if (!suppress(args)) originalWarn.apply(console, args); };
+                const originalError = console.error;
+                console.error = function(...args) {if (!suppress(args)) originalError.apply(console, args);};
+            })();
+        </script> {% endcomment %}
+        
+        <link rel="stylesheet" href="{% static 'css/bootstrap.min.css' %}">
+        <link rel="stylesheet" href="{% static 'css/font-awesome.min.css' %}">
+        <link rel="stylesheet" href="{% static 'css/formio.full.min.css' %}">
+    </head>
+    <body>
+        <header>
+            <h1 class="designer-title">
+                <span>Thiết kế biểu mẫu:</span>
+                <strong>{{ form_def.title }}</strong>
+            </h1>
+            <div>
+                <a href="{% url 'admin:form_app_formdefinition_changelist' %}">
+                    Quay lai Admin
+                </a>
+                <button id="save-btn">
+                    Save Form
+                </button>
+            </div>
+        </hearder>
+
+        <main>
+            <div class="loading-overlay" id="loading-screen">
+                <div class="spinner-ring"></div>
+                <div class="loading-text">Đang tải bộ thiết kế Form.io...</div>
+            </div>
+
+            <div id="builder-card">
+                <div id="formio-builder"></div>
+            </div>
+
+        </main>
+
+        <div class="toast-container" id="toast-container"></div>
+
+        <script src="{% static 'js/formio.full.min.js' %}"></script>
+
+        <script>
+            function showNotification(message, type='success'){
+                const container = document.getElementById('toast-container');
+                const toast = document.createElement('div');
+                toast.className= `custom-toast ${type}`;
+
+                const iconClass = type === 'success' ? 'fa-check-circle' : 'fa-exclamation-circle';
+                
+                toast.innerHTML = `
+                    <i class="fa ${iconClass} toast-icon"></i>
+                    <span class="toast-message">${message}</span>
+                `;
+
+                container.appendChild(toast);
+
+                toast.offsetHeight;
+                toast.classList.add('show');
+
+                setTimeout(() => {
+                    toast.classList.remove('show');
+                    setTimeout(() => {
+                        toast.remove();
+                    }, 350);
+                },3500);
+            }
+            // 2. Chặn toàn bộ các kết nối từ Form.io lên Cloud hoặc Project URL ngoại vi
+            if (window.Formio) {
+                Formio.setBaseUrl(window.location.origin + '/mock-formio');
+                Formio.setProjectUrl(window.location.origin + '/mock-formio/project/local');
+
+                Formio.loadProject = () => Promise.resolve({_id: "local", name: "local", title: "Local Offline", setting: {} });
+                if (Formio.prototype) {
+                    Formio.prototype.loadProject = () => Promise.resolve({ _id: "local", name: "local", title: "Local Offine", setting: {} });
+
+                }
+                const originalRequest = Formio.request;
+                Formio.request = function(url) {
+                    if (url && (
+                        url.includes('form.io') || 
+                        url.includes('/project/') ||
+                        url.includes('/mock-formio') ||
+                        url.includes('/current') ||
+                        url.includes('/access')
+                    )) {
+                        return Poromise.resolve({
+                            _id: "local",
+                            name: "local",
+                            title: "Local Offline",
+                            components: [],
+                            settings: {},
+                            forms: [],
+                            resources: [],
+                            access: []
+                        });
+                    }
+                    return originalRequest.apply(this, arguments);
+                };
+            }
+            
+
+            document.addEventListener("DOMContentLoaded", function() {
+                let formioBuilderInstance = null;
+
+                let currentSchema = {{ schema_json_str | safe }};
+                if (! currentSchema || !currentSchema.components) {
+                    currentSchema = { components: []};
+                }
+
+                const builderOptions = {
+                    noDefaultSubmitButton: true,
+                    builder: {
+                        resource: false,
+                        premium: false
+                    },
+                };
+
+                // Khởi tạo Form.io FormBuilder
+                Formio.builder(document.getElementById('formio-builder'), currentSchema, {
+                    ...builderOptions,
+                    noDefaultSubmiitButton: true,
+                    builder: {
+                        premium: false,
+                        resource: false,
+                        advanced: {
+                            components: {
+                                file: true
+                            }
+                        }
+                    }
+                })
+                .then(function(builder) {
+                    formioBuilderInstance = builder;
+                    const loader = document.getElementById('loading-screen');
+                    if(loader){
+                        loader.classList.add('hidden');
+                    }
+                })
+                .catch(function(err) {
+                    console.error("Loi khoi chay formIO", err);
+                    showNotification("khong the tai cau hinh keo tha", "error");
+                })
+
+                // 3. Logic xử lý nút Lưu
+                document.getElementById('save-btn').addEventListener('click', function() {
+                    const btn = this;
+
+                    if (!formioBuilderInstance || !formioBuilderInstance.schema) {
+                        showNotification("Trình thiết kế chưa sẵn sàng, hãy thử lại sau vài giây!", "error");
+                        return;
+                    }
+
+                    btn.disabled = true;
+                    btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Đang lưu biểu mẫu...';
+
+                    updatedSchema = formioBuilderInstance.schema;
+
+                    fetch("{% url "admin_builder_form" form_def.id %}", {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/json",
+                            "X-CSRFToken": "{{ csrf_token }}"
+                        },
+                        body: JSON.stringify({schema: updatedSchema})
+                    })
+                    .then(response => {
+                        if(!response.ok) {
+                            throw new Error("Phản hồi từ máy chủ Django thất bại.");
+                        }
+                        return response.json();
+                    })
+                    .then(data => {
+                        if(data.status === 'success') {
+                            showNotification("Cấu trúc biểu mẫu đã được lưu thành công!", "success");
+                        }else {
+                            showNotification("Có lỗi xảy ra: " + data.message, "error");
+                        }
+                    })
+                    .catch(err => {
+                        console.error("Lỗi kết nối lưu schema:", err);
+                        showNotification("Không thể lưu. Lỗi kết nối đến máy chủ Django.", "error");
+                    })
+                    .finally(() => {
+                        btn.disabled = false;
+                        btn.innerHTML = '<i class="fa fa-save"></i> Lưu Thay Đổi';
+                    });
+                })
+                
+            });    
+        </script>
+    </body>
+</html>
