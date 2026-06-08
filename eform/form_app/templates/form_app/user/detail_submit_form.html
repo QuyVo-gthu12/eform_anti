@@ -1,0 +1,89 @@
+{% extends "form_app/user/base.html" %}
+{% load static %}
+
+{% block title %}Chi tiết biểu mẫu đã nộp - eForm{% endblock %}
+{% block page_title %}Chi tiết kết quả: {{ form_def.title }}{% endblock %}
+
+{% block content %}
+<!-- Nhúng tài nguyên CSS Form.io Local -->
+<link rel="stylesheet" href="{% static 'css/formio.full.min.css' %}">
+<link rel="stylesheet" href="{% static 'css/font-awesome.min.css' %}">
+
+<style>
+    .back-nav { margin-bottom: 20px; }
+    .back-link { color: #64748b; text-decoration: none; font-weight: 600; font-size: 14px; }
+    .back-link:hover { color: #1e293b; }
+    
+    /* Trạng thái loading quay tròn */
+    .loading-overlay { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 40px; background: #fff; }
+    .spinner-ring { width: 40px; height: 40px; border: 4px solid #f3f3f3; border-top: 4px solid #2563eb; border-radius: 50%; animation: spin 1s linear infinite; }
+    .loading-text { margin-top: 15px; color: #64748b; font-weight: 500; }
+    @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    .hidden { display: none !important; }
+    
+    /* Nhấn mạnh vùng xem chi tiết */
+    .info-bar { background: #f8fafc; padding: 12px 20px; border-radius: 6px; border: 1px solid #e2e8f0; margin-bottom: 20px; font-size: 14px; color: #475569; }
+</style>
+
+<div class="back-nav">
+    <a href="{% url 'list_submissions' %}" class="back-link">
+        <i class="fa fa-arrow-left"></i> Quay lại danh sách đã nộp
+    </a>
+</div>
+
+<div class="info-bar d-flex justify-content-between">
+    <div><i class="fa fa-calendar"></i> <strong>Thời gian nộp:</strong> {{ submission.submitted_at|date:"d/m/Y H:i:s" }}</div>
+    <div><i class="fa fa-hashtag"></i> <strong>Mã bản ghi:</strong> #{{ submission.id }}</div>
+</div>
+
+<!-- Khung chứa Form (Sử dụng class card sẵn có của bạn) -->
+<div class="card">
+    <div class="loading-overlay" id="loading-screen">
+        <div class="spinner-ring"></div>
+        <div class="loading-text">Đang tải và kết xuất dữ liệu biểu mẫu...</div>
+    </div>
+
+    <!-- Nơi Form.io kết xuất form ở chế độ Read-Only -->
+    <div id="formio-render-area"></div>
+</div>
+
+<script src="{% static 'js/formio.full.min.js' %}"></script>
+<script>
+    document.addEventListener("DOMContentLoaded", function() {
+        // Chặn kết nối mạng đám mây của Form.io
+        if (window.Formio) {
+            Formio.setBaseUrl(window.location.origin + '/mock-formio');
+            Formio.setProjectUrl(window.location.origin + '/mock-formio/project/local');
+        }
+
+        // 1. Nạp cấu trúc form gốc và dữ liệu đã nhập từ Django Context
+        const formSchema = {{ schema_json_str|safe }};
+        const submissionData = {{ submission_json_str|safe }};
+
+        // 2. Khởi tạo Form.io ở chế độ tạo form
+        Formio.createForm(document.getElementById('formio-render-area'), formSchema, {
+            readOnly: true,              // KÍCH HOẠT CHẾ ĐỘ CHỈ ĐỌC, KHÓA TOÀN BỘ Ô NHẬP LIỆU
+            noDefaultSubmitButton: true, // Ẩn hoàn toàn nút gửi form nếu có trong thiết kế
+            buttonSettings: { showCancel: false }
+        })
+        .then(function(formInstance) {
+            // Ẩn màn hình chờ khi giao diện đã dựng xong
+            const loader = document.getElementById('loading-screen');
+            if (loader) { loader.classList.add('hidden'); }
+
+            // 3. Đổ ngược dữ liệu đã nộp vào các ô nhập liệu tương ứng trên giao diện
+            // Form.io yêu cầu dữ liệu nạp vào phải bọc trong một object có thuộc tính 'data'
+            formInstance.submission = {
+                data: submissionData
+            };
+        })
+        .catch(function(err) {
+            console.error("Lỗi kết xuất chi tiết form:", err);
+            const loader = document.getElementById('loading-screen');
+            if (loader) {
+                loader.innerHTML = '<div style="color:#ef4444;"><i class="fa fa-exclamation-triangle"></i> Không thể nạp dữ liệu chi tiết của biểu mẫu này.</div>';
+            }
+        });
+    });
+</script>
+{% endblock %}

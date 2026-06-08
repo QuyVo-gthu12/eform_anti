@@ -7,5 +7,9 @@ urlpatterns = [
     path('', views.home_view, name='home'),
     path('forms/', views.list_forms_view, name='list_forms'),
     path('forms/<int:form_id>/', views.render_form_view, name='render_form'),
-    path('forms/<int:form_id>/submit/', views.submit_form_api, name='submit_form_api')
+    
+    path('submissions/', views.list_submitted_forms_views, name='list_submissions'),
+    path('submissions/<int:submission_id>/detail/', views.detail_submit_form_view, name='detail_submit_form'),
+    path('forms/<int:form_id>/submit/', views.submit_form_api, name='submit_form_api'),
+    
 ]

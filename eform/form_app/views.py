@@ -18,6 +18,30 @@ def list_forms_view(request):
     
     return render(request, 'form_app/user/list_form.html', {'forms': forms})
 
+def list_submitted_forms_views(request):
+    submissions = FormSubmission.objects.select_related('form_definition').order_by('-submitted_at')
+    
+    context = {
+        'submissions': submissions
+    }
+    return render(request, 'form_app/user/list_submit_form.html', context)
+
+def detail_submit_form_view(request, submission_id):
+    # 1. Tìm bản ghi kết quả nộp dựa trên ID
+    submission = get_object_or_404(FormSubmission, id=submission_id)
+    
+    # 2. Lấy cấu trúc form gốc tương ứng
+    form_def = submission.form_definition
+    
+    context = {
+        'form_def': form_def,
+        'submission': submission,
+        # Chuyển cấu trúc form và dữ liệu nhập thành chuỗi JSON an toàn cho JS
+        'schema_json_str': json.dumps(form_def.schema_json),
+        'submission_json_str': json.dumps(submission.data)
+    }
+    return render(request, 'form_app/user/detail_submit_form.html', context)
+
 def render_form_view(request, form_id):
     form_def = get_object_or_404(FormDefinition, id=form_id, is_active=True)
     schema_json_str =json.dumps(form_def.schema_json)

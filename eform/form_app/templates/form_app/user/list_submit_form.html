@@ -1,0 +1,136 @@
+{% extends "form_app/user/base.html" %}
+{% load static %}
+
+{% block title %}Lịch sử nộp biểu mẫu - eForm{% endblock %}
+{% block page_title %}Danh sách Biểu mẫu đã nộp (Submitted Forms){% endblock %}
+
+{% block content %}
+<style>
+    /* CSS Table đồng bộ với giao diện Dashboard của bạn */
+    .table-container {
+        margin-top: 10px;
+        overflow-x: auto;
+    }
+
+    .custom-table {
+        width: 100%;
+        border-collapse: collapse;
+        text-align: left;
+        font-size: 14px;
+    }
+
+    .custom-table th {
+        background: #f8fafc;
+        color: #64748b;
+        padding: 14px 16px;
+        font-weight: 600;
+        border-bottom: 2px solid #e2e8f0;
+        text-transform: uppercase;
+        font-size: 12px;
+        letter-spacing: 0.5px;
+    }
+
+    .custom-table td {
+        padding: 14px 16px;
+        color: #334155;
+        border-bottom: 1px solid #e2e8f0;
+    }
+
+    .custom-table tragic:hover td {
+        background: #f8fafc;
+    }
+
+    .badge-time {
+        display: inline-block;
+        background: #f1f5f9;
+        color: #475569;
+        padding: 4px 8px;
+        border-radius: 4px;
+        font-size: 12px;
+        font-weight: 500;
+    }
+
+    .btn-view-detail {
+        display: inline-block;
+        background: #f1f5f9;
+        color: #1e293b;
+        text-decoration: none;
+        padding: 6px 12px;
+        border-radius: 6px;
+        font-size: 13px;
+        font-weight: 600;
+        border: 1px solid #cbd5e1;
+        transition: 0.2s;
+    }
+
+    .btn-view-detail:hover {
+        background: #e2e8f0;
+        color: #0f172a;
+    }
+
+    .empty-submission {
+        text-align: center;
+        padding: 40px;
+        color: #64748b;
+    }
+</style>
+
+<!-- Sử dụng class card có sẵn trong file CSS của bạn -->
+<div class="card">
+    <div class="table-container">
+        {% if submissions %}
+            <table class="custom-table">
+                <thead>
+                    <tr>
+                        <th style="width: 80px;">STT</th>
+                        <th>Tên biểu mẫu</th>
+                        <th>Thời gian nộp</th>
+                        <th>Xem dữ liệu chi tiết</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for submission in submissions %}
+                        <tr class="tragic">
+                            <!-- Bộ đếm số thứ tự tăng dần của Django Template -->
+                            <td><strong>{{ forloop.counter }}</strong></td>
+                            
+                            <!-- Tiêu đề Form lấy thông qua quan hệ ForeignKey -->
+                            <td style="font-weight: 600; color: #1e293b;">
+                                {{ submission.form_definition.title }}
+                            </td>
+                            
+                            <!-- Định dạng ngày giờ nộp chuẩn Việt Nam -->
+                            <td>
+                                <span class="badge-time">
+                                    {{ submission.submitted_at|date:"d/m/Y H:i:s" }}
+                                </span>
+                            </td>
+                            
+                            <!-- Nút chức năng mở xem nội dung chi tiết -->
+                            <td>
+                                <a href="{% url 'detail_submit_form' submission.id %}" class="btn-view-detail">
+                                    <i class="fa fa-eye"></i> Xem chi tiết
+                                </a>
+                            </td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        {% else %}
+            <div class="empty-submission">
+                <h3>Chưa có dữ liệu biểu mẫu nào được nộp</h3>
+                <p style="margin-top: 5px;">Các kết quả sau khi người dùng điền và submit sẽ xuất hiện tập trung tại đây.</p>
+            </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- JavaScript bổ sung giúp hiển thị nhanh dữ liệu đã nộp dưới dạng Alert/Console để test -->
+<script>
+    function viewJsonData(id, jsonData) {
+        console.log("Dữ liệu bản ghi số " + id + ":", jsonData);
+        // Tạm thời hiển thị dưới dạng chuỗi chữ đẹp mắt để kiểm tra dữ liệu ô nhập và link MinIO
+        alert("Dữ liệu nộp (JSON):\n" + JSON.stringify(jsonData, null, 4));
+    }
+</script>
+{% endblock %}
