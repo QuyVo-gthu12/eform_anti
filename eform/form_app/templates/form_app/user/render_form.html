@@ -3,8 +3,15 @@
 
 {% block title %}{{ form_def.title }} - eForm{% endblock %}
 {% block page_title %}{{ form_def.title }}{% endblock %}
+{% block header_extra %}
+    <link rel="stylesheet" href="{% static 'css/render.css' %}">
+
+{% endblock header_extra %}
 
 {% block content %}
+<!-- Nhúng CSS trực tiếp tại trang để khắc phục triệt để lỗi cache trình duyệt không nhận CSS mới -->
+
+
 <div>
     <a href="{% url 'list_forms' %}" class="back-link">
         <i class="fa fa-arrow-left"></i> Quay lại Tất cả Biểu mẫu
@@ -16,10 +23,10 @@
     <div class="draft-toolbar">
         <input type="text" id="draft-title-input" placeholder="Đặt tên cho bản nháp..." value="{{ draft_title|default:'' }}" />
         <button type="button" class="btn-save-draft" id="btn-save-draft">
-            <i class="fa fa-floppy-o"></i> Lưu nháp
+            <i class="fa fa-save"></i> Lưu nháp
         </button>
         <button type="button" class="btn-toggle-drafts" id="btn-toggle-drafts">
-            <i class="fa fa-folder-open-o"></i> Bản nháp đã lưu
+            <i class="fa fa-folder-open"></i> Bản nháp đã lưu
             <span class="badge" id="draft-count">0</span>
         </button>
     </div>
@@ -131,7 +138,7 @@
             showNotification('Không thể kết nối máy chủ để lưu nháp.', 'error');
         } finally {
             btn.disabled = false;
-            btn.innerHTML = '<i class="fa fa-floppy-o"></i> Lưu nháp';
+            btn.innerHTML = '<i class="fa fa-save"></i> Lưu nháp';
         }
     }
 
@@ -225,6 +232,65 @@
         }
     }
 
+    // ========== DEFERRED FILE UPLOADS ==========
+    async function uploadPendingFiles(formData) {
+        const fileFields = findFileComponents(formRef.schema.components);
+        for (const fieldKey of fileFields) {
+            const files = formData[fieldKey] || [];
+            for (let i = 0; i < files.length; i++) {
+                const fileObj = files[i];
+                if (fileObj.url && fileObj.url.startsWith('blob:')) {
+                    const blob = await fetch(fileObj.url).then(r => r.blob());
+                    const uploadData = new FormData();
+                    uploadData.append('file', blob, fileObj.name);
+
+                    const uploadResponse = await fetch(DJANGO_UPLOAD_URL, {
+                        method: 'POST',
+                        headers: { 'X-CSRFToken': csrfToken },
+                        body: uploadData
+                    });
+
+                    if (!uploadResponse.ok) {
+                        throw new Error(`Upload file ${fileObj.name} thất bại.`);
+                    }
+
+                    const result = await uploadResponse.json();
+                    files[i] = {
+                        storage: 'django',
+                        name: result.name,
+                        originalName: result.originalName,
+                        size: result.size,
+                        type: result.type,
+                        url: result.url
+                    };
+                }
+            }
+        }
+    }
+
+    function findFileComponents(components) {
+        let keys = [];
+        function traverse(comps) {
+            if (!comps) return;
+            comps.forEach(comp => {
+                if (comp.type === 'file') {
+                    keys.push(comp.key);
+                }
+                if (comp.components) {
+                    traverse(comp.components);
+                }
+                if (comp.columns) {
+                    comp.columns.forEach(col => traverse(col.components));
+                }
+                if (comp.rows) {
+                    comp.rows.forEach(row => row.forEach(col => traverse(col.components)));
+                }
+            });
+        }
+        traverse(components);
+        return keys;
+    }
+
     // ========== DOM READY ==========
     document.addEventListener("DOMContentLoaded", function() {
 
@@ -248,132 +314,11 @@
             if (Formio.prototype) {
                 Formio.prototype.loadProject = () => Promise.resolve({ _id: "local", name: "local", setting: {} });
                 Formio.prototype.loadForm = () => Promise.resolve({ _id: "local", components: [] });
-                Formio.prototype.loadSubmission = () => Promise.resolve({ _id: "local", data: {} });
-            }
-
-            const originalRequest = Formio.request;
-            Formio.request = function(url) {
-                if (url && (
-                    url.includes('form.io') || 
-                    url.includes('/project/') ||
-                    url.includes('/mock-formio') ||
-                    url.includes('/current') ||
-                    url.includes('/access') ||
-                    url.includes('undefined')
-                )) {
-                    return Promise.resolve({
-                        _id: "local", name: "local", title: "Local Offline",
-                        components: [], settings: {}, forms: [], resources: [], access: []
-                    });
-                }
-                return originalRequest.apply(this, arguments);
-            };
-        }
-
-        let formSchema = {{ schema_json_str | safe }};
-        if (!formSchema || !formSchema.components) {
-            formSchema = { components: [] };
-        }
-
-        // ========================================================
-        // DEFERRED UPLOAD: Lưu file tạm vào bộ nhớ, chỉ upload
-        // lên MinIO sau khi user bấm nút Submit.
-        // ========================================================
-        const pendingFiles = new Map();
-
-        Formio.Providers.addProvider('storage', 'django', function(formio) {
-            return {
-                title: 'Django Backend',
-                name: 'django',
-                uploadFile: function(file, fileName, dir, progressCallback, url, options, fileKey, groupPermissions, groupId, uploadStartCallback, abortCallback) {
-                    return new Promise(function(resolve) {
-                        const tempUrl = URL.createObjectURL(file);
-                        pendingFiles.set(tempUrl, { file: file, fileName: fileName });
-                        if (typeof uploadStartCallback === 'function') uploadStartCallback();
-                        if (typeof progressCallback === 'function') progressCallback(100);
-                        resolve({
-                            storage: 'django',
-                            name: fileName,
-                            url: tempUrl,
-                            size: file.size,
-                            type: file.type,
-                            _pending: true
-                        });
-                    });
-                },
-                downloadFile: function(file) {
-                    return Promise.resolve(file);
-                },
-                deleteFile: function(file) {
-                    if (file.url && pendingFiles.has(file.url)) {
-                        URL.revokeObjectURL(file.url);
-                        pendingFiles.delete(file.url);
-                    }
-                    return Promise.resolve(file);
-                }
-            };
-        });
-
-        function patchFileComponents(components) {
-            if (!Array.isArray(components)) return;
-            components.forEach(function(c) {
-                if (c.type === 'file') {
-                    c.storage = 'django';
-                    c.url = DJANGO_UPLOAD_URL;
-                }
-                if (c.components) patchFileComponents(c.components);
-                if (c.columns)    c.columns.forEach(col => patchFileComponents(col.components));
-                if (c.rows)       c.rows.forEach(row => row.forEach(cell => patchFileComponents(cell.components)));
-            });
-        }
-        patchFileComponents(formSchema.components);
-
-        async function uploadPendingFiles(data) {
-            if (!data || typeof data !== 'object') return;
-            for (const key of Object.keys(data)) {
-                const value = data[key];
-                if (Array.isArray(value) && value.length > 0 && value[0] && value[0].storage === 'django') {
-                    for (let i = 0; i < value.length; i++) {
-                        const fileObj = value[i];
-                        if (!fileObj._pending) continue;
-                        const pending = pendingFiles.get(fileObj.url);
-                        if (!pending) continue;
-                        const formData = new FormData();
-                        formData.append('file', pending.file, pending.fileName);
-                        const response = await fetch(DJANGO_UPLOAD_URL, {
-                            method: 'POST',
-                            headers: {
-                                'X-CSRFToken': csrfToken,
-                                'X-Requested-With': 'XMLHttpRequest'
-                            },
-                            body: formData
-                        });
-                        if (!response.ok) {
-                            throw new Error(`Upload file "${pending.fileName}" thất bại (HTTP ${response.status}).`);
-                        }
-                        const result = await response.json();
-                        URL.revokeObjectURL(fileObj.url);
-                        pendingFiles.delete(fileObj.url);
-                        value[i] = {
-                            storage: 'django',
-                            name: result.name || pending.fileName,
-                            originalName: result.originalName || pending.fileName,
-                            url: result.url,
-                            size: result.size || pending.file.size,
-                            type: result.type || pending.file.type,
-                        };
-                    }
-                } else if (value && typeof value === 'object' && !Array.isArray(value)) {
-                    await uploadPendingFiles(value);
-                } else if (Array.isArray(value)) {
-                    for (const item of value) {
-                        if (item && typeof item === 'object') {
-                            await uploadPendingFiles(item);
-                        }
-                    }
-                }
             }
         }
+
+        // Lấy cấu trúc form
+        const formSchema = {{ schema_json_str|safe }};
 
         // ========== KHỞI TẠO FORM.IO ==========
         Formio.createForm(document.getElementById('formio-render-area'), formSchema, {

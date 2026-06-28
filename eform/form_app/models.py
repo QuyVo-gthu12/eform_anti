@@ -26,12 +26,22 @@ class FormDefinition(models.Model):
         return self.title
     
 class FormSubmission(models.Model):
+    STATUS_CHOICES = [
+        ('submitted', 'Đã nộp'),
+        ('cancelled', 'Đã hủy'),
+    ]
     form_definition = models.ForeignKey(
         FormDefinition,
         on_delete=models.CASCADE,
     )
     data = models.JSONField()
     submitted_at = models.DateTimeField(auto_now_add=True)
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default='submitted'
+    )
+
     
 class FormDraft(models.Model):
     form_definition = models.ForeignKey(

@@ -36,8 +36,16 @@
         border-bottom: 1px solid #e2e8f0;
     }
 
-    .custom-table tragic:hover td {
+    .custom-table tr:hover td {
         background: #f8fafc;
+    }
+
+    /* Hiệu ứng mờ dòng đối với đơn đã hủy */
+    .custom-table tr.cancelled-row td {
+        color: #94a3b8;
+    }
+    .custom-table tr.cancelled-row td a.btn-view-detail {
+        opacity: 0.85;
     }
 
     .badge-time {
@@ -48,6 +56,27 @@
         border-radius: 4px;
         font-size: 12px;
         font-weight: 500;
+    }
+
+    /* Nhãn trạng thái */
+    .status-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        padding: 4px 10px;
+        border-radius: 20px;
+        font-size: 12px;
+        font-weight: 600;
+    }
+    .status-badge.status-submitted {
+        background-color: #ecfdf5;
+        color: #047857;
+        border: 1px solid #a7f3d0;
+    }
+    .status-badge.status-cancelled {
+        background-color: #fef2f2;
+        color: #b91c1c;
+        border: 1px solid #fecaca;
     }
 
     .btn-view-detail {
@@ -85,17 +114,18 @@
                         <th style="width: 80px;">STT</th>
                         <th>Tên biểu mẫu</th>
                         <th>Thời gian nộp</th>
+                        <th>Trạng thái</th>
                         <th>Xem dữ liệu chi tiết</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for submission in submissions %}
-                        <tr class="tragic">
+                        <tr class="{% if submission.status == 'cancelled' %}cancelled-row{% endif %}">
                             <!-- Bộ đếm số thứ tự tăng dần của Django Template -->
                             <td><strong>{{ forloop.counter }}</strong></td>
                             
                             <!-- Tiêu đề Form lấy thông qua quan hệ ForeignKey -->
-                            <td style="font-weight: 600; color: #1e293b;">
+                            <td style="font-weight: 600;">
                                 {{ submission.form_definition.title }}
                             </td>
                             
@@ -104,6 +134,19 @@
                                 <span class="badge-time">
                                     {{ submission.submitted_at|date:"d/m/Y H:i:s" }}
                                 </span>
+                            </td>
+
+                            <!-- Hiển thị nhãn trạng thái đơn -->
+                            <td>
+                                {% if submission.status == 'cancelled' %}
+                                    <span class="status-badge status-cancelled">
+                                        <i class="fa fa-times-circle"></i> Đã hủy
+                                    </span>
+                                {% else %}
+                                    <span class="status-badge status-submitted">
+                                        <i class="fa fa-check-circle"></i> Đã nộp
+                                    </span>
+                                {% endif %}
                             </td>
                             
                             <!-- Nút chức năng mở xem nội dung chi tiết -->
@@ -124,13 +167,4 @@
         {% endif %}
     </div>
 </div>
-
-<!-- JavaScript bổ sung giúp hiển thị nhanh dữ liệu đã nộp dưới dạng Alert/Console để test -->
-<script>
-    function viewJsonData(id, jsonData) {
-        console.log("Dữ liệu bản ghi số " + id + ":", jsonData);
-        // Tạm thời hiển thị dưới dạng chuỗi chữ đẹp mắt để kiểm tra dữ liệu ô nhập và link MinIO
-        alert("Dữ liệu nộp (JSON):\n" + JSON.stringify(jsonData, null, 4));
-    }
-</script>
 {% endblock %}

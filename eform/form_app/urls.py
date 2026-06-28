@@ -6,19 +6,20 @@ urlpatterns = [
     path('api/upload-file/', views.upload_file_to_minio, name='upload_file'),
     path('', views.home_view, name='home'),
     path('forms/', views.list_forms_view, name='list_forms'),
-    path('forms/<int:form_id>/', views.render_form_view, name='render_form'),
     
+    # Class-Based Views
+    path('forms/<int:form_id>/', views.RenderFormView.as_view(), name='render_form'),
+    path('drafts/', views.ListDraftsPageView.as_view(), name='list_drafts'),
+    path('forms/<int:form_id>/submit/', views.SubmitFormApiView.as_view(), name='submit_form_api'),
+    
+    # Draft APIs (Class-Based Views)
+    path('api/forms/<int:form_id>/drafts/save/', views.SaveDraftApiView.as_view(), name='save_draft_api'),
+    path('api/forms/<int:form_id>/drafts/', views.ListDraftsApiView.as_view(), name='list_drafts_api'),
+    path('api/forms/<int:form_id>/drafts/<int:draft_id>/', views.LoadDraftApiView.as_view(), name='load_draft_api'),
+    path('api/forms/<int:form_id>/drafts/<int:draft_id>/delete/', views.DeleteDraftApiView.as_view(), name='delete_draft_api'),
+    
+    # Submissions
     path('submissions/', views.list_submitted_forms_views, name='list_submissions'),
     path('submissions/<int:submission_id>/detail/', views.detail_submit_form_view, name='detail_submit_form'),
-    path('forms/<int:form_id>/submit/', views.submit_form_api, name='submit_form_api'),
-    
-    # Drafts Page
-    path('drafts/', views.list_drafts_page_view, name='list_drafts'),
-    
-    # Draft APIs
-    path('api/forms/<int:form_id>/drafts/save/', views.save_draft_api, name='save_draft_api'),
-    path('api/forms/<int:form_id>/drafts/', views.list_drafts_api, name='list_drafts_api'),
-    path('api/forms/<int:form_id>/drafts/<int:draft_id>/', views.load_draft_api, name='load_draft_api'),
-    path('api/forms/<int:form_id>/drafts/<int:draft_id>/delete/', views.delete_draft_api, name='delete_draft_api'),
+    path('submissions/<int:submission_id>/cancel/', views.CancelSubmissionView.as_view(), name='cancel_submission'),
 ]
-
