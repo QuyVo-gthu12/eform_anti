@@ -12,4 +12,13 @@ urlpatterns = [
     path('submissions/<int:submission_id>/detail/', views.detail_submit_form_view, name='detail_submit_form'),
     path('forms/<int:form_id>/submit/', views.submit_form_api, name='submit_form_api'),
     
+    # Drafts Page
+    path('drafts/', views.list_drafts_page_view, name='list_drafts'),
+    
+    # Draft APIs
+    path('api/forms/<int:form_id>/drafts/save/', views.save_draft_api, name='save_draft_api'),
+    path('api/forms/<int:form_id>/drafts/', views.list_drafts_api, name='list_drafts_api'),
+    path('api/forms/<int:form_id>/drafts/<int:draft_id>/', views.load_draft_api, name='load_draft_api'),
+    path('api/forms/<int:form_id>/drafts/<int:draft_id>/delete/', views.delete_draft_api, name='delete_draft_api'),
 ]
+

@@ -1,0 +1,278 @@
+{% extends "form_app/user/base.html" %}
+{% load static %}
+
+{% block title %}Danh sách Bản nháp - eForm{% endblock %}
+{% block page_title %}Danh sách Bản nháp (Drafts){% endblock %}
+
+{% block content %}
+<style>
+    .drafts-container {
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+        margin-top: 10px;
+    }
+
+    .draft-card {
+        background: white;
+        border: 1px solid #e2e8f0;
+        border-radius: 12px;
+        padding: 20px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.03);
+        transition: transform 0.2s, box-shadow 0.2s;
+    }
+
+    .draft-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 18px rgba(0, 0, 0, 0.08);
+        border-color: #cbd5e1;
+    }
+
+    .draft-details {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+    }
+
+    .draft-title-line {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+
+    .draft-card-title {
+        font-size: 18px;
+        font-weight: 600;
+        color: #1e293b;
+    }
+
+    .form-badge {
+        background: #f1f5f9;
+        color: #475569;
+        font-size: 12px;
+        font-weight: 600;
+        padding: 4px 10px;
+        border-radius: 6px;
+        border: 1px solid #e2e8f0;
+    }
+
+    .draft-meta {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        color: #94a3b8;
+        font-size: 13px;
+    }
+
+    .draft-meta span {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+    }
+
+    .draft-actions {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+    }
+
+    .btn-continue {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        background: linear-gradient(135deg, #4f46e5, #6366f1);
+        color: white;
+        text-decoration: none;
+        padding: 10px 18px;
+        border-radius: 8px;
+        font-weight: 600;
+        font-size: 14px;
+        box-shadow: 0 4px 10px rgba(99, 102, 241, 0.2);
+        transition: all 0.25s ease;
+    }
+
+    .btn-continue:hover {
+        background: linear-gradient(135deg, #4338ca, #4f46e5);
+        box-shadow: 0 6px 14px rgba(99, 102, 241, 0.35);
+        transform: translateY(-1px);
+        color: white;
+    }
+
+    .btn-delete-page {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 38px;
+        height: 38px;
+        background: #fef2f2;
+        color: #dc2626;
+        border: 1px solid #fecaca;
+        border-radius: 8px;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+
+    .btn-delete-page:hover {
+        background: #dc2626;
+        color: white;
+        border-color: #dc2626;
+    }
+
+    .empty-drafts {
+        text-align: center;
+        padding: 60px 40px;
+        color: #64748b;
+        background: white;
+        border-radius: 12px;
+        border: 1px solid #e2e8f0;
+    }
+
+    .empty-drafts i {
+        font-size: 48px;
+        color: #cbd5e1;
+        margin-bottom: 16px;
+    }
+
+    .toast-container {
+        position: fixed;
+        top: 24px;
+        right: 24px;
+        z-index: 9999;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+    }
+
+    .custom-toast {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 14px 20px;
+        border-radius: 10px;
+        font-size: 14px;
+        font-weight: 500;
+        color: white;
+        box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+        transform: translateX(120%);
+        opacity: 0;
+        transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .custom-toast.show {
+        transform: translateX(0);
+        opacity: 1;
+    }
+
+    .custom-toast.success {
+        background: linear-gradient(135deg, #059669, #10b981);
+    }
+
+    .custom-toast.error {
+        background: linear-gradient(135deg, #dc2626, #ef4444);
+    }
+</style>
+
+<div class="toast-container" id="toast-container"></div>
+
+<div class="drafts-container">
+    {% if drafts %}
+        {% for draft in drafts %}
+            <div class="draft-card" id="draft-card-{{ draft.id }}">
+                <div class="draft-details">
+                    <div class="draft-title-line">
+                        <span class="draft-card-title">{{ draft.title|default:"Nháp chưa đặt tên" }}</span>
+                        <span class="form-badge">{{ draft.form_definition.title }}</span>
+                    </div>
+                    <div class="draft-meta">
+                        <span>
+                            <i class="fa fa-calendar"></i> Tạo lúc: {{ draft.created_at|date:"d/m/Y H:i" }}
+                        </span>
+                        <span>
+                            <i class="fa fa-clock-o"></i> Sửa cuối: {{ draft.updated_at|date:"d/m/Y H:i" }}
+                        </span>
+                    </div>
+                </div>
+
+                <div class="draft-actions">
+                    <a href="{% url 'render_form' draft.form_definition.id %}?draft_id={{ draft.id }}" class="btn-continue">
+                        <i class="fa fa-pencil-square-o"></i> Tiếp tục điền
+                    </a>
+                    <button class="btn-delete-page" title="Xóa bản nháp" onclick="deleteDraftPage({{ draft.id }}, {{ draft.form_definition.id }})">
+                        <i class="fa fa-trash"></i>
+                    </button>
+                </div>
+            </div>
+        {% endfor %}
+    {% else %}
+        <div class="empty-drafts">
+            <i class="fa fa-folder-open-o"></i>
+            <h3>Không có bản nháp nào đang dở</h3>
+            <p style="margin-top: 5px;">Khi điền form, bạn có thể bấm "Lưu nháp" để lưu lại tiến trình điền của mình.</p>
+        </div>
+    {% endif %}
+</div>
+
+<script>
+    function showNotification(message, type='success'){
+        const container = document.getElementById('toast-container');
+        if (!container) return; 
+        
+        const toast = document.createElement('div');
+        toast.className = `custom-toast ${type}`;
+        const iconClass = type === 'success' ? 'fa-check-circle' : 'fa-exclamation-circle';
+        
+        toast.innerHTML = `
+            <i class="fa ${iconClass} toast-icon"></i>
+            <span class="toast-message">${message}</span>
+        `;
+
+        container.appendChild(toast);
+        toast.offsetHeight;
+        toast.classList.add('show');
+
+        setTimeout(() => {
+            toast.classList.remove('show');
+            setTimeout(() => { toast.remove(); }, 350);
+        }, 3500);
+    }
+
+    async function deleteDraftPage(draftId, formId) {
+        if (!confirm('Bạn có chắc chắn muốn xóa bản nháp này?')) return;
+        
+        try {
+            const response = await fetch(`/api/forms/${formId}/drafts/${draftId}/delete/`, {
+                method: 'DELETE',
+                headers: {
+                    'X-CSRFToken': '{{ csrf_token }}'
+                }
+            });
+            const result = await response.json();
+            if (result.status === 'success') {
+                showNotification('Đã xóa bản nháp thành công.', 'success');
+                const card = document.getElementById(`draft-card-${draftId}`);
+                if (card) {
+                    card.style.transition = 'all 0.3s ease';
+                    card.style.opacity = 0;
+                    card.style.transform = 'translateY(10px)';
+                    setTimeout(() => {
+                        card.remove();
+                        // Nếu không còn bản nháp nào, reload để hiện empty state
+                        const remaining = document.querySelectorAll('.draft-card');
+                        if (remaining.length === 0) {
+                            window.location.reload();
+                        }
+                    }, 300);
+                }
+            } else {
+                showNotification(result.message || 'Xóa bản nháp thất bại.', 'error');
+            }
+        } catch (err) {
+            console.error('Lỗi khi xóa nháp:', err);
+            showNotification('Có lỗi xảy ra khi kết nối máy chủ.', 'error');
+        }
+    }
+</script>
+{% endblock %}

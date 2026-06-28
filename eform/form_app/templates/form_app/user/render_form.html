@@ -11,6 +11,33 @@
     </a>
 </div>
 
+<!-- ======== DRAFT SECTION ======== -->
+<div class="draft-section">
+    <div class="draft-toolbar">
+        <input type="text" id="draft-title-input" placeholder="Đặt tên cho bản nháp..." value="{{ draft_title|default:'' }}" />
+        <button type="button" class="btn-save-draft" id="btn-save-draft">
+            <i class="fa fa-floppy-o"></i> Lưu nháp
+        </button>
+        <button type="button" class="btn-toggle-drafts" id="btn-toggle-drafts">
+            <i class="fa fa-folder-open-o"></i> Bản nháp đã lưu
+            <span class="badge" id="draft-count">0</span>
+        </button>
+    </div>
+
+    <!-- Panel danh sách nháp (ẩn mặc định) -->
+    <div class="draft-list-panel" id="draft-list-panel">
+        <div class="draft-list-header">
+            <h4><i class="fa fa-file-text-o"></i> Danh sách bản nháp</h4>
+        </div>
+        <div class="draft-list-body" id="draft-list-body">
+            <div class="draft-empty">
+                <i class="fa fa-inbox"></i>
+                Chưa có bản nháp nào.
+            </div>
+        </div>
+    </div>
+</div>
+
 <div>
     <!-- Màn hình chờ tải giao diện form -->
     <div class="loading-overlay" id="loading-screen">
@@ -18,7 +45,7 @@
         <div class="loading-text">Đang khởi dựng giao diện biểu mẫu...</div>
     </div>
 
-    <!-- ĐÃ SỬA ID: Nơi Form.io sẽ kết xuất giao diện để người dùng điền -->
+    <!-- Nơi Form.io sẽ kết xuất giao diện để người dùng điền -->
     <div id="formio-render-area"></div>
 </div> 
 
@@ -28,32 +55,191 @@
 <script src="{% static 'js/formio.full.min.js' %}"></script>
 
 <script>
-    // 1. Hàm hiển thị thông báo toast
+    // ========== CONSTANTS ==========
+    const FORM_ID = {{ form_def.id }};
+    const csrfToken = '{{ csrf_token }}';
+    const DJANGO_UPLOAD_URL = '/api/upload-file/';
+    const DRAFT_API = {
+        save: `/api/forms/${FORM_ID}/drafts/save/`,
+        list: `/api/forms/${FORM_ID}/drafts/`,
+        load: (draftId) => `/api/forms/${FORM_ID}/drafts/${draftId}/`,
+        delete: (draftId) => `/api/forms/${FORM_ID}/drafts/${draftId}/delete/`,
+    };
+
+    // Biến lưu ID nháp đang được chỉnh sửa (nếu có)
+    let currentDraftId = {% if draft_id %}{{ draft_id }}{% else %}null{% endif %};
+    // Dữ liệu nháp ban đầu từ Django context
+    const initialDraftData = {% if draft_data_json_str %}{{ draft_data_json_str|safe }}{% else %}null{% endif %};
+    // Tham chiếu tới form instance (gán sau khi Formio.createForm xong)
+    let formRef = null;
+
+    // ========== TOAST ==========
     function showNotification(message, type='success'){
         const container = document.getElementById('toast-container');
         if (!container) return; 
-        
         const toast = document.createElement('div');
         toast.className = `custom-toast ${type}`;
-
         const iconClass = type === 'success' ? 'fa-check-circle' : 'fa-exclamation-circle';
-        
         toast.innerHTML = `
             <i class="fa ${iconClass} toast-icon"></i>
             <span class="toast-message">${message}</span>
         `;
-
         container.appendChild(toast);
         toast.offsetHeight;
         toast.classList.add('show');
-
         setTimeout(() => {
             toast.classList.remove('show');
             setTimeout(() => { toast.remove(); }, 350);
         }, 3500);
     }
 
+    // ========== DRAFT FUNCTIONS ==========
+
+    // Lưu nháp
+    async function saveDraft() {
+        if (!formRef) return;
+        const titleInput = document.getElementById('draft-title-input');
+        const title = titleInput.value.trim() || `Nháp ${new Date().toLocaleString('vi-VN')}`;
+        const btn = document.getElementById('btn-save-draft');
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Đang lưu...';
+
+        try {
+            const response = await fetch(DRAFT_API.save, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': csrfToken,
+                },
+                body: JSON.stringify({
+                    data: formRef.submission.data,
+                    title: title,
+                    draft_id: currentDraftId,
+                }),
+            });
+            const result = await response.json();
+            if (result.status === 'success') {
+                currentDraftId = result.draft_id;
+                titleInput.value = title;
+                showNotification(result.message, 'success');
+                loadDraftList();
+            } else {
+                showNotification(result.message || 'Lưu nháp thất bại.', 'error');
+            }
+        } catch (err) {
+            console.error('Lỗi lưu nháp:', err);
+            showNotification('Không thể kết nối máy chủ để lưu nháp.', 'error');
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fa fa-floppy-o"></i> Lưu nháp';
+        }
+    }
+
+    // Tải danh sách nháp
+    async function loadDraftList() {
+        try {
+            const response = await fetch(DRAFT_API.list);
+            const result = await response.json();
+            const listBody = document.getElementById('draft-list-body');
+            const countBadge = document.getElementById('draft-count');
+            const drafts = result.drafts || [];
+            countBadge.textContent = drafts.length;
+
+            if (drafts.length === 0) {
+                listBody.innerHTML = `
+                    <div class="draft-empty">
+                        <i class="fa fa-inbox"></i>
+                        Chưa có bản nháp nào.
+                    </div>`;
+                return;
+            }
+
+            listBody.innerHTML = drafts.map(d => `
+                <div class="draft-item" data-id="${d.id}">
+                    <div class="draft-item-info">
+                        <div class="draft-item-title">
+                            ${d.title}
+                            ${d.id == currentDraftId ? '<span class="draft-active-badge">Đang chỉnh sửa</span>' : ''}
+                        </div>
+                        <div class="draft-item-date">
+                            <i class="fa fa-clock-o"></i> Cập nhật: ${d.updated_at}
+                        </div>
+                    </div>
+                    <div class="draft-item-actions">
+                        <button class="btn-draft-load" onclick="event.stopPropagation(); loadDraft(${d.id}, '${d.title.replace(/'/g, "\\'")}')">
+                            <i class="fa fa-upload"></i> Mở
+                        </button>
+                        <button class="btn-draft-delete" onclick="event.stopPropagation(); deleteDraft(${d.id})">
+                            <i class="fa fa-trash"></i> Xóa
+                        </button>
+                    </div>
+                </div>
+            `).join('');
+        } catch (err) {
+            console.error('Lỗi tải danh sách nháp:', err);
+        }
+    }
+
+    // Tải một bản nháp cụ thể vào form
+    async function loadDraft(draftId, draftTitle) {
+        if (!formRef) return;
+        try {
+            const response = await fetch(DRAFT_API.load(draftId));
+            const result = await response.json();
+            if (result.status === 'success') {
+                const draft = result.draft;
+                formRef.submission = { data: draft.data };
+                currentDraftId = draft.id;
+                document.getElementById('draft-title-input').value = draft.title || '';
+                showNotification(`Đã tải bản nháp "${draftTitle}"`, 'success');
+                loadDraftList(); // Refresh để cập nhật badge "Đang chỉnh sửa"
+            } else {
+                showNotification('Không thể tải bản nháp.', 'error');
+            }
+        } catch (err) {
+            console.error('Lỗi tải nháp:', err);
+            showNotification('Không thể kết nối máy chủ.', 'error');
+        }
+    }
+
+    // Xóa bản nháp
+    async function deleteDraft(draftId) {
+        if (!confirm('Bạn có chắc muốn xóa bản nháp này?')) return;
+        try {
+            const response = await fetch(DRAFT_API.delete(draftId), {
+                method: 'DELETE',
+                headers: { 'X-CSRFToken': csrfToken },
+            });
+            const result = await response.json();
+            if (result.status === 'success') {
+                if (currentDraftId === draftId) {
+                    currentDraftId = null;
+                    document.getElementById('draft-title-input').value = '';
+                }
+                showNotification('Đã xóa bản nháp.', 'success');
+                loadDraftList();
+            }
+        } catch (err) {
+            console.error('Lỗi xóa nháp:', err);
+            showNotification('Không thể xóa bản nháp.', 'error');
+        }
+    }
+
+    // ========== DOM READY ==========
     document.addEventListener("DOMContentLoaded", function() {
+
+        // Toggle panel danh sách nháp
+        document.getElementById('btn-toggle-drafts').addEventListener('click', function() {
+            const panel = document.getElementById('draft-list-panel');
+            panel.classList.toggle('open');
+        });
+
+        // Nút lưu nháp
+        document.getElementById('btn-save-draft').addEventListener('click', saveDraft);
+
+        // Tải danh sách nháp ban đầu
+        loadDraftList();
+
         // ĐĂNG KÝ CHẶN MẠNG NGẦM ĐỂ CHẠY LOCAL OFFLINE
         if (window.Formio) {
             Formio.setBaseUrl(window.location.origin + '/mock-formio');
@@ -65,7 +251,6 @@
                 Formio.prototype.loadSubmission = () => Promise.resolve({ _id: "local", data: {} });
             }
 
-            // Đánh lừa bộ lọc Request lõi của Form.io
             const originalRequest = Formio.request;
             Formio.request = function(url) {
                 if (url && (
@@ -74,7 +259,7 @@
                     url.includes('/mock-formio') ||
                     url.includes('/current') ||
                     url.includes('/access') ||
-                    url.includes('undefined') // Chặn đứng lệnh gọi lỗi tự sinh
+                    url.includes('undefined')
                 )) {
                     return Promise.resolve({
                         _id: "local", name: "local", title: "Local Offline",
@@ -85,7 +270,6 @@
             };
         }
 
-        // ĐÃ SỬA CÚ PHÁP COMMENT: Đồng bộ chuẩn tên biến formSchema và schema_json_str từ Django View
         let formSchema = {{ schema_json_str | safe }};
         if (!formSchema || !formSchema.components) {
             formSchema = { components: [] };
@@ -95,46 +279,32 @@
         // DEFERRED UPLOAD: Lưu file tạm vào bộ nhớ, chỉ upload
         // lên MinIO sau khi user bấm nút Submit.
         // ========================================================
-        const csrfToken = '{{ csrf_token }}';
-        const DJANGO_UPLOAD_URL = '/api/upload-file/';
-
-        // Map lưu trữ: tempBlobUrl -> { file, fileName }
         const pendingFiles = new Map();
 
         Formio.Providers.addProvider('storage', 'django', function(formio) {
             return {
                 title: 'Django Backend',
                 name: 'django',
-
-                // Khi user chọn file: KHÔNG upload ngay, chỉ tạo blob URL tạm thời
                 uploadFile: function(file, fileName, dir, progressCallback, url, options, fileKey, groupPermissions, groupId, uploadStartCallback, abortCallback) {
                     return new Promise(function(resolve) {
                         const tempUrl = URL.createObjectURL(file);
-                        // Lưu file thật vào Map để sau này upload
                         pendingFiles.set(tempUrl, { file: file, fileName: fileName });
-
-                        // Báo cáo progress 100% ngay lập tức (không cần chờ network)
                         if (typeof uploadStartCallback === 'function') uploadStartCallback();
                         if (typeof progressCallback === 'function') progressCallback(100);
-
-                        // Trả về metadata tạm, đánh dấu _pending = true
                         resolve({
                             storage: 'django',
                             name: fileName,
                             url: tempUrl,
                             size: file.size,
                             type: file.type,
-                            _pending: true  // Cờ hiệu: chưa upload lên server
+                            _pending: true
                         });
                     });
                 },
-
                 downloadFile: function(file) {
                     return Promise.resolve(file);
                 },
-
                 deleteFile: function(file) {
-                    // Dọn dẹp blob URL khi user xóa file trước khi submit
                     if (file.url && pendingFiles.has(file.url)) {
                         URL.revokeObjectURL(file.url);
                         pendingFiles.delete(file.url);
@@ -144,7 +314,6 @@
             };
         });
 
-        // ÉP TẤT CẢ FILE COMPONENT DÙNG STORAGE 'django'
         function patchFileComponents(components) {
             if (!Array.isArray(components)) return;
             components.forEach(function(c) {
@@ -159,29 +328,18 @@
         }
         patchFileComponents(formSchema.components);
 
-        // ================================================================
-        // Upload thật lên MinIO: duyệt toàn bộ data, tìm file _pending,
-        // upload từng cái, thay URL tạm bằng URL MinIO thật.
-        // ================================================================
         async function uploadPendingFiles(data) {
             if (!data || typeof data !== 'object') return;
-
             for (const key of Object.keys(data)) {
                 const value = data[key];
-
-                // Form.io lưu file dưới dạng mảng object
                 if (Array.isArray(value) && value.length > 0 && value[0] && value[0].storage === 'django') {
                     for (let i = 0; i < value.length; i++) {
                         const fileObj = value[i];
-                        if (!fileObj._pending) continue; // Bỏ qua nếu đã upload rồi
-
+                        if (!fileObj._pending) continue;
                         const pending = pendingFiles.get(fileObj.url);
                         if (!pending) continue;
-
-                        // Upload thật lên MinIO qua Django endpoint
                         const formData = new FormData();
                         formData.append('file', pending.file, pending.fileName);
-
                         const response = await fetch(DJANGO_UPLOAD_URL, {
                             method: 'POST',
                             headers: {
@@ -190,18 +348,12 @@
                             },
                             body: formData
                         });
-
                         if (!response.ok) {
                             throw new Error(`Upload file "${pending.fileName}" thất bại (HTTP ${response.status}).`);
                         }
-
                         const result = await response.json();
-
-                        // Dọn dẹp blob URL
                         URL.revokeObjectURL(fileObj.url);
                         pendingFiles.delete(fileObj.url);
-
-                        // Ghi đè lên object trong mảng bằng dữ liệu thật từ server
                         value[i] = {
                             storage: 'django',
                             name: result.name || pending.fileName,
@@ -212,10 +364,8 @@
                         };
                     }
                 } else if (value && typeof value === 'object' && !Array.isArray(value)) {
-                    // Đệ quy vào object lồng nhau (datagrid, nested form...)
                     await uploadPendingFiles(value);
                 } else if (Array.isArray(value)) {
-                    // Đệ quy vào từng phần tử của mảng (datagrid rows)
                     for (const item of value) {
                         if (item && typeof item === 'object') {
                             await uploadPendingFiles(item);
@@ -225,19 +375,26 @@
             }
         }
 
-        // Khởi dựng Form.io
+        // ========== KHỞI TẠO FORM.IO ==========
         Formio.createForm(document.getElementById('formio-render-area'), formSchema, {
             noDefaultSubmitButton: false,
             buttonSettings: { showCancel: false },
         })
         .then(function(formInstance) {
+            // Lưu tham chiếu để các hàm draft truy cập
+            formRef = formInstance;
+
+            // Load dữ liệu nháp ban đầu nếu có
+            if (initialDraftData) {
+                formInstance.submission = { data: initialDraftData };
+            }
+
             const loader = document.getElementById('loading-screen');
             if(loader) { loader.classList.add('hidden'); }
 
             formInstance.nosubmit = true;
 
             formInstance.on('submit', async function(submission) {
-                // Vô hiệu hoá nút submit để tránh double-click
                 const submitBtn = document.querySelector('#formio-render-area button[type="submit"]');
                 if (submitBtn) {
                     submitBtn.disabled = true;
@@ -248,14 +405,17 @@
                     // BƯỚC 1: Upload tất cả file đang pending lên MinIO
                     await uploadPendingFiles(submission.data);
 
-                    // BƯỚC 2: Gửi toàn bộ submission (đã có URL thật) về Django
+                    // BƯỚC 2: Gửi toàn bộ submission về Django, kèm draft_id nếu có
                     const response = await fetch("{% url 'submit_form_api' form_def.id %}", {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json',
-                            'X-CSRFToken': '{{ csrf_token }}'
+                            'X-CSRFToken': csrfToken,
                         },
-                        body: JSON.stringify(submission.data)
+                        body: JSON.stringify({
+                            data: submission.data,
+                            draft_id: currentDraftId,
+                        })
                     });
 
                     if (!response.ok) throw new Error('Phản hồi từ máy chủ Django thất bại.');
@@ -265,6 +425,7 @@
                     if (data.status === 'success') {
                         showNotification('Bạn đã nộp biểu mẫu thành công!', 'success');
                         formInstance.emit('submitDone', submission);
+                        currentDraftId = null;
                         setTimeout(() => {
                             window.location.href = "{% url 'list_forms' %}";
                         }, 2000);
