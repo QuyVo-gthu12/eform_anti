@@ -43,11 +43,8 @@
         background-color: #dc2626;
         transform: translateY(-1px);
     }
-    .btn-cancel-submission:active {
-        transform: translateY(0);
-    }
 
-    /* Giao diện khi đơn đã bị hủy */
+    /* Giao diện khi đơn đã bị hủy hoặc bị từ chối */
     .cancelled-banner {
         background: linear-gradient(135deg, #fef2f2, #fee2e2);
         border: 1px solid #fca5a5;
@@ -66,7 +63,7 @@
         color: #dc2626;
     }
 
-    /* Đổi màu viền và hiệu ứng đỏ cho khung form đã hủy */
+    /* Đổi màu viền và hiệu ứng đỏ cho khung form đã hủy hoặc bị từ chối */
     .card.cancelled-form-style {
         border: 2px dashed #fca5a5 !important;
         box-shadow: 0 4px 12px rgba(220, 38, 38, 0.05) !important;
@@ -88,6 +85,198 @@
         z-index: 10;
         letter-spacing: 1px;
     }
+
+    .card.rejected-form-style {
+        border: 2px dashed #f87171 !important;
+        position: relative;
+    }
+    .card.rejected-form-style::before {
+        content: "BỊ TỪ CHỐI / REJECTED";
+        position: absolute;
+        top: 20px;
+        right: 20px;
+        font-size: 14px;
+        font-weight: 800;
+        color: #ef4444;
+        border: 2px solid #ef4444;
+        padding: 4px 8px;
+        border-radius: 4px;
+        transform: rotate(-5deg);
+        opacity: 0.85;
+        z-index: 10;
+        letter-spacing: 1px;
+    }
+
+    .card.approved-form-style {
+        border: 2px solid #34d399 !important;
+        position: relative;
+    }
+    .card.approved-form-style::before {
+        content: "ĐÃ DUYỆT / APPROVED";
+        position: absolute;
+        top: 20px;
+        right: 20px;
+        font-size: 14px;
+        font-weight: 800;
+        color: #10b981;
+        border: 2px solid #10b981;
+        padding: 4px 8px;
+        border-radius: 4px;
+        transform: rotate(-3deg);
+        opacity: 0.85;
+        z-index: 10;
+        letter-spacing: 1px;
+    }
+
+    /* Approval History Card */
+    .approval-history-card {
+        background: #ffffff;
+        border: 1px solid #e2e8f0;
+        border-radius: 10px;
+        padding: 20px;
+        margin-bottom: 24px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+    }
+    .approval-history-title {
+        font-size: 16px;
+        font-weight: 700;
+        color: #1e293b;
+        margin-bottom: 15px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        border-bottom: 1px solid #f1f5f9;
+        padding-bottom: 10px;
+    }
+    .history-timeline {
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+    }
+    .timeline-step {
+        display: flex;
+        gap: 12px;
+    }
+    .step-icon-wrapper {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+    }
+    .step-icon {
+        width: 28px;
+        height: 28px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        font-size: 12px;
+    }
+    .step-icon.success { background-color: #10b981; }
+    .step-icon.info { background-color: #3b82f6; }
+    .step-icon.warning { background-color: #f59e0b; }
+    .step-icon.danger { background-color: #ef4444; }
+    
+    .step-content {
+        flex: 1;
+        background: #f8fafc;
+        padding: 12px 16px;
+        border-radius: 8px;
+        border: 1px solid #f1f5f9;
+    }
+    .step-header {
+        display: flex;
+        justify-content: space-between;
+        font-size: 13px;
+        color: #64748b;
+        margin-bottom: 4px;
+    }
+    .step-user {
+        font-weight: 600;
+        color: #334155;
+    }
+    .step-comment {
+        font-size: 14px;
+        color: #334155;
+        margin-top: 6px;
+        font-style: italic;
+        background: white;
+        padding: 6px 12px;
+        border-left: 3px solid #cbd5e1;
+        border-radius: 4px;
+    }
+
+    /* Action Panel */
+    .approval-action-card {
+        background: #ffffff;
+        border: 1px solid #bfdbfe;
+        border-radius: 10px;
+        padding: 20px;
+        margin-top: 24px;
+        box-shadow: 0 4px 12px rgba(59, 130, 246, 0.05);
+    }
+    .approval-action-card.manager-border {
+        border-color: #e9d5ff;
+        box-shadow: 0 4px 12px rgba(168, 85, 247, 0.05);
+    }
+    .approval-action-title {
+        font-size: 16px;
+        font-weight: 700;
+        color: #1d4ed8;
+        margin-bottom: 12px;
+    }
+    .approval-action-card.manager-border .approval-action-title {
+        color: #6b21a8;
+    }
+    .comment-textarea {
+        width: 100%;
+        min-height: 80px;
+        padding: 10px 14px;
+        border: 1px solid #cbd5e1;
+        border-radius: 8px;
+        font-size: 14px;
+        margin-bottom: 16px;
+        resize: vertical;
+    }
+    .comment-textarea:focus {
+        outline: none;
+        border-color: #3b82f6;
+        box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+    }
+    .action-buttons-group {
+        display: flex;
+        gap: 12px;
+    }
+    .btn-approve-action {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        background: #10b981;
+        color: white;
+        border: none;
+        padding: 10px 22px;
+        border-radius: 8px;
+        font-weight: 600;
+        font-size: 14px;
+        cursor: pointer;
+        transition: background 0.2s;
+    }
+    .btn-approve-action:hover { background: #059669; }
+    .btn-reject-action {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        background: #ef4444;
+        color: white;
+        border: none;
+        padding: 10px 22px;
+        border-radius: 8px;
+        font-weight: 600;
+        font-size: 14px;
+        cursor: pointer;
+        transition: background 0.2s;
+    }
+    .btn-reject-action:hover { background: #dc2626; }
 
     /* Toast */
     .toast-container {
@@ -128,35 +317,125 @@
 <div class="toast-container" id="toast-container"></div>
 
 <div class="back-nav">
-    <a href="{% url 'list_submissions' %}" class="back-link">
-        <i class="fa fa-arrow-left"></i> Quay lại danh sách đã nộp
-    </a>
+    <!-- Nếu là checker/manager thì quay lại danh sách duyệt, còn lại quay lại lịch sử nộp -->
+    {% if is_checker or is_manager %}
+        <a href="{% url 'approve_list' %}" class="back-link">
+            <i class="fa fa-arrow-left"></i> Quay lại Danh sách cần duyệt
+        </a>
+    {% else %}
+        <a href="{% url 'list_submissions' %}" class="back-link">
+            <i class="fa fa-arrow-left"></i> Quay lại lịch sử nộp đơn
+        </a>
+    {% endif %}
 </div>
 
 {% if submission.status == 'cancelled' %}
-    <!-- Banner cảnh báo đỏ nổi bật -->
     <div class="cancelled-banner">
         <i class="fa fa-exclamation-triangle"></i>
-        <span>Biểu mẫu này đã bị hủy bỏ bởi người dùng. Thông tin dưới đây chỉ dùng để xem lại.</span>
+        <span>Biểu mẫu này đã bị hủy bỏ bởi người nộp đơn.</span>
     </div>
+{% elif submission.status == 'rejected' %}
+    <div class="cancelled-banner">
+        <i class="fa fa-times-circle" style="color: #ef4444;"></i>
+        <span>Biểu mẫu này đã bị từ chối phê duyệt.</span>
+    </div>
+{% endif %}
+
+<!-- 1. LỊCH SỬ PHÊ DUYỆT (Chỉ hiển thị nếu đã qua ít nhất 1 cấp xử lý) -->
+{% if submission.checked_by or submission.approved_by %}
+<div class="approval-history-card">
+    <div class="approval-history-title">
+        <i class="fa fa-history"></i> Lịch sử phê duyệt biểu mẫu
+    </div>
+    <div class="history-timeline">
+        <!-- Cấp 1: Checker -->
+        {% if submission.checked_by %}
+        <div class="timeline-step">
+            <div class="step-icon-wrapper">
+                <div class="step-icon {% if submission.status == 'rejected' and not submission.approved_by %}danger{% else %}success{% endif %}">
+                    {% if submission.status == 'rejected' and not submission.approved_by %}
+                        <i class="fa fa-times"></i>
+                    {% else %}
+                        <i class="fa fa-check"></i>
+                    {% endif %}
+                </div>
+            </div>
+            <div class="step-content">
+                <div class="step-header">
+                    <span class="step-user"><i class="fa fa-user-secret"></i> Checker: {{ submission.checked_by.username }}</span>
+                    <span><i class="fa fa-calendar"></i> {{ submission.checked_at|date:"d/m/Y H:i:s" }}</span>
+                </div>
+                <div class="font-weight-bold" style="font-size: 13px; color: {% if submission.status == 'rejected' and not submission.approved_by %}#ef4444{% else %}#10b981{% endif %};">
+                    {% if submission.status == 'rejected' and not submission.approved_by %}
+                        Không đồng ý (Từ chối duyệt)
+                    {% else %}
+                        Đồng ý (Đã duyệt chuyển cấp Manager)
+                    {% endif %}
+                </div>
+                {% if submission.checker_comment %}
+                    <div class="step-comment">{{ submission.checker_comment }}</div>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Cấp 2: Manager -->
+        {% if submission.approved_by %}
+        <div class="timeline-step">
+            <div class="step-icon-wrapper">
+                <div class="step-icon {% if submission.status == 'rejected' %}danger{% else %}success{% endif %}">
+                    {% if submission.status == 'rejected' %}
+                        <i class="fa fa-times"></i>
+                    {% else %}
+                        <i class="fa fa-check"></i>
+                    {% endif %}
+                </div>
+            </div>
+            <div class="step-content">
+                <div class="step-header">
+                    <span class="step-user"><i class="fa fa-user"></i> Manager: {{ submission.approved_by.username }}</span>
+                    <span><i class="fa fa-calendar"></i> {{ submission.approved_at|date:"d/m/Y H:i:s" }}</span>
+                </div>
+                <div class="font-weight-bold" style="font-size: 13px; color: {% if submission.status == 'rejected' %}#ef4444{% else %}#10b981{% endif %};">
+                    {% if submission.status == 'rejected' %}
+                        Không đồng ý (Từ chối phê duyệt)
+                    {% else %}
+                        Đã phê duyệt hoàn toàn
+                    {% endif %}
+                </div>
+                {% if submission.manager_comment %}
+                    <div class="step-comment">{{ submission.manager_comment }}</div>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
 {% endif %}
 
 <div class="info-bar d-flex justify-content-between align-items-center">
     <div>
+        <span class="mr-4"><i class="fa fa-user"></i> <strong>Người nộp:</strong> {{ submission.user.username|default:"Ẩn danh" }}</span>
         <span class="mr-4"><i class="fa fa-calendar"></i> <strong>Thời gian nộp:</strong> {{ submission.submitted_at|date:"d/m/Y H:i:s" }}</span>
         <span class="ml-4 mr-4"><i class="fa fa-hashtag"></i> <strong>Mã bản ghi:</strong> #{{ submission.id }}</span>
         <span class="ml-4">
             <i class="fa fa-info-circle"></i> <strong>Trạng thái:</strong> 
             {% if submission.status == 'cancelled' %}
                 <span class="text-danger font-weight-bold">Đã hủy</span>
-            {% else %}
-                <span class="text-success font-weight-bold">Đã nộp</span>
+            {% elif submission.status == 'rejected' %}
+                <span class="text-danger font-weight-bold">Bị từ chối</span>
+            {% elif submission.status == 'pending_checker' %}
+                <span class="text-primary font-weight-bold">Chờ Checker duyệt</span>
+            {% elif submission.status == 'pending_manager' %}
+                <span class="text-warning font-weight-bold">Chờ Manager duyệt</span>
+            {% elif submission.status == 'approved' %}
+                <span class="text-success font-weight-bold">Đã phê duyệt</span>
             {% endif %}
         </span>
     </div>
     
-    {% if submission.status == 'submitted' %}
-        <!-- Nút Hủy đơn chỉ xuất hiện khi trạng thái là Đã nộp -->
+    {% if submission.status == 'pending_checker' and is_owner %}
+        <!-- Nút Hủy đơn chỉ xuất hiện cho chủ đơn khi đang chờ Checker duyệt -->
         <div>
             <button type="button" class="btn-cancel-submission" onclick="cancelThisSubmission({{ submission.id }})">
                 <i class="fa fa-ban"></i> Hủy đơn này
@@ -166,7 +445,7 @@
 </div>
 
 <!-- Khung chứa Form -->
-<div class="card {% if submission.status == 'cancelled' %}cancelled-form-style{% endif %}">
+<div class="card {% if submission.status == 'cancelled' or submission.status == 'rejected' %}cancelled-form-style{% elif submission.status == 'approved' %}approved-form-style{% endif %}">
     <div class="loading-overlay" id="loading-screen">
         <div class="spinner-ring"></div>
         <div class="loading-text">Đang tải và kết xuất dữ liệu biểu mẫu...</div>
@@ -175,6 +454,37 @@
     <!-- Nơi Form.io kết xuất form ở chế độ Read-Only -->
     <div id="formio-render-area"></div>
 </div>
+
+<!-- 2. KHUNG THAO TÁC DUYỆT ĐƠN (Chỉ hiển thị cho vai trò tương ứng) -->
+{% if submission.status == 'pending_checker' and is_checker %}
+    <!-- Checker phê duyệt cấp 1 -->
+    <div class="approval-action-card">
+        <div class="approval-action-title"><i class="fa fa-gavel"></i> Bảng xử lý của Checker (Cấp 1)</div>
+        <textarea id="approval-comment" class="comment-textarea" placeholder="Nhập ý kiến kiểm duyệt (nếu có)..."></textarea>
+        <div class="action-buttons-group">
+            <button class="btn-approve-action" onclick="submitApproval('approve')">
+                <i class="fa fa-check"></i> Duyệt (Chuyển cấp Manager)
+            </button>
+            <button class="btn-reject-action" onclick="submitApproval('reject')">
+                <i class="fa fa-times"></i> Từ chối đơn
+            </button>
+        </div>
+    </div>
+{% elif submission.status == 'pending_manager' and is_manager %}
+    <!-- Manager phê duyệt cấp 2 -->
+    <div class="approval-action-card manager-border">
+        <div class="approval-action-title"><i class="fa fa-gavel"></i> Bảng phê duyệt của Manager (Cấp 2)</div>
+        <textarea id="approval-comment" class="comment-textarea" placeholder="Nhập ý kiến phê duyệt cuối cùng (nếu có)..."></textarea>
+        <div class="action-buttons-group">
+            <button class="btn-approve-action" onclick="submitApproval('approve')">
+                <i class="fa fa-check"></i> Phê duyệt hoàn toàn
+            </button>
+            <button class="btn-reject-action" onclick="submitApproval('reject')">
+                <i class="fa fa-times"></i> Từ chối đơn
+            </button>
+        </div>
+    </div>
+{% endif %}
 
 <script src="{% static 'js/formio.full.min.js' %}"></script>
 <script>
@@ -202,9 +512,7 @@
     }
 
     async function cancelThisSubmission(submissionId) {
-        if (!confirm('Bạn có chắc chắn muốn hủy bỏ đơn này không? Hành động này không thể hoàn tác.')) {
-            return;
-        }
+        if (!confirm('Bạn có chắc chắn muốn hủy bỏ đơn này không?')) return;
         
         try {
             const response = await fetch(`/submissions/${submissionId}/cancel/`, {
@@ -215,12 +523,9 @@
                 }
             });
             const result = await response.json();
-            
             if (result.status === 'success') {
                 showNotification('Đã hủy đơn thành công!', 'success');
-                setTimeout(() => {
-                    window.location.reload();
-                }, 1500);
+                setTimeout(() => { window.location.reload(); }, 1500);
             } else {
                 showNotification(result.message || 'Hủy đơn thất bại.', 'error');
             }
@@ -230,29 +535,59 @@
         }
     }
 
+    // Gửi quyết định phê duyệt/từ chối của Checker/Manager
+    async function submitApproval(action) {
+        const actionText = action === 'approve' ? 'Phê duyệt' : 'Từ chối';
+        if (!confirm(`Bạn có chắc chắn muốn thực hiện hành động: ${actionText}?`)) return;
+
+        const commentVal = document.getElementById('approval-comment').value;
+        
+        try {
+            const response = await fetch(`/submissions/{{ submission.id }}/approve/`, {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': '{{ csrf_token }}',
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    action: action,
+                    comment: commentVal
+                })
+            });
+            const result = await response.json();
+            
+            if (result.status === 'success') {
+                showNotification('Đã lưu quyết định phê duyệt thành công!', 'success');
+                setTimeout(() => {
+                    window.location.href = "{% url 'approve_list' %}";
+                }, 1500);
+            } else {
+                showNotification(result.message || 'Lưu quyết định thất bại.', 'error');
+            }
+        } catch (err) {
+            console.error('Lỗi duyệt đơn:', err);
+            showNotification('Có lỗi kết nối tới máy chủ.', 'error');
+        }
+    }
+
     document.addEventListener("DOMContentLoaded", function() {
-        // Chặn kết nối mạng đám mây của Form.io
         if (window.Formio) {
             Formio.setBaseUrl(window.location.origin + '/mock-formio');
             Formio.setProjectUrl(window.location.origin + '/mock-formio/project/local');
         }
 
-        // 1. Nạp cấu trúc form gốc và dữ liệu đã nhập từ Django Context
         const formSchema = {{ schema_json_str|safe }};
         const submissionData = {{ submission_json_str|safe }};
 
-        // 2. Khởi tạo Form.io ở chế độ tạo form
         Formio.createForm(document.getElementById('formio-render-area'), formSchema, {
-            readOnly: true,              // KÍCH HOẠT CHẾ ĐỘ CHỈ ĐỌC, KHÓA TOÀN BỘ Ô NHẬP LIỆU
-            noDefaultSubmitButton: true, // Ẩn hoàn toàn nút gửi form nếu có trong thiết kế
+            readOnly: true,
+            noDefaultSubmitButton: true,
             buttonSettings: { showCancel: false }
         })
         .then(function(formInstance) {
-            // Ẩn màn hình chờ khi giao diện đã dựng xong
             const loader = document.getElementById('loading-screen');
             if (loader) { loader.classList.add('hidden'); }
 
-            // 3. Đổ ngược dữ liệu đã nộp vào các ô nhập liệu tương ứng trên giao diện
             formInstance.submission = {
                 data: submissionData
             };

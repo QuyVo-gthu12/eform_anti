@@ -136,3 +136,10 @@ MINIO_ACCESS_KEY = config("MINIO_ACCESS_KEY")
 MINIO_SECRET_KEY = config("MINIO_SECRET_KEY")
 MINIO_BUCKET_NAME = config("MINIO_BUCKET_NAME")
 MINIO_SECURE=config("MINIO_SECURE")
+# --- Cấu hình Email (Dùng để gửi thông báo duyệt đơn) ---
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+EMAIL_HOST = 'smtp.gmail.com'
+EMAIL_PORT = 587
+EMAIL_USE_TLS = True
+EMAIL_HOST_USER = 'voquy1354@gmail.com'  # Email dùng để gửi đi
+EMAIL_HOST_PASSWORD = 'avox cvbo lfet ngpu'  # Thay bằng Mật khẩu ứng dụng (App Password) của bạn

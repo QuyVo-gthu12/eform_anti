@@ -25,22 +25,59 @@ class FormDefinition(models.Model):
     def __str__(self):
         return self.title
     
+from django.contrib.auth.models import User
+
 class FormSubmission(models.Model):
     STATUS_CHOICES = [
-        ('submitted', 'Đã nộp'),
+        ('pending_checker', 'Chờ Checker duyệt'),
+        ('pending_manager', 'Chờ Manager duyệt'),
+        ('approved', 'Đã phê duyệt'),
+        ('rejected', 'Bị từ chối'),
         ('cancelled', 'Đã hủy'),
     ]
     form_definition = models.ForeignKey(
         FormDefinition,
         on_delete=models.CASCADE,
     )
+    user = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='submissions'
+    )
     data = models.JSONField()
     submitted_at = models.DateTimeField(auto_now_add=True)
     status = models.CharField(
         max_length=20,
         choices=STATUS_CHOICES,
-        default='submitted'
+        default='pending_checker'
     )
+    
+    # Thông tin kiểm duyệt (Checker - Cấp 1)
+    checked_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='checked_submissions'
+    )
+    checked_at = models.DateTimeField(null=True, blank=True)
+    
+    # Thông tin phê duyệt (Manager - Cấp 2)
+    approved_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='approved_submissions'
+    )
+    approved_at = models.DateTimeField(null=True, blank=True)
+    
+    # Ý kiến phản hồi của người duyệt
+    checker_comment = models.TextField(blank=True, default='')
+    manager_comment = models.TextField(blank=True, default='')
+
 
     
 class FormDraft(models.Model):

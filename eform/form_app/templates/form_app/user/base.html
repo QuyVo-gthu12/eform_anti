@@ -44,7 +44,7 @@
             Bản nháp
         </a>
 
-        <a href="#">
+        <a href="{% url 'approve_list' %}">
             Approve Form
         </a>
 
@@ -61,10 +61,21 @@
             <h3>{% block page_title %}Dashboard{% endblock %}</h3>
         </div>
 
-        <div class="user-info">
-            {{ request.user.username }}
+        <div class="user-info" style="display: flex; align-items: center; gap: 15px;">
+            {% if request.user.is_authenticated %}
+                <span><i class="fa fa-user-circle-o"></i> {{ request.user.username }}</span>
+                <form method="post" action="{% url 'logout' %}" style="margin: 0;">
+                    {% csrf_token %}
+                    <button type="submit" style="background: #ef4444; color: white; border: none; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 600;">
+                        <i class="fa fa-sign-out"></i> Đăng xuất
+                    </button>
+                </form>
+            {% else %}
+                <a href="{% url 'login' %}" style="background: #4f46e5; color: white; text-decoration: none; padding: 6px 12px; border-radius: 6px; font-size: 13px; font-weight: 600;">
+                    <i class="fa fa-sign-in"></i> Đăng nhập
+                </a>
+            {% endif %}
         </div>
-
     </header>
 
     <section class="content">

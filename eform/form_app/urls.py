@@ -1,4 +1,5 @@
 from django.urls import path 
+from django.contrib.auth import views as auth_views
 from . import views
 
 urlpatterns = [
@@ -22,4 +23,12 @@ urlpatterns = [
     path('submissions/', views.list_submitted_forms_views, name='list_submissions'),
     path('submissions/<int:submission_id>/detail/', views.detail_submit_form_view, name='detail_submit_form'),
     path('submissions/<int:submission_id>/cancel/', views.CancelSubmissionView.as_view(), name='cancel_submission'),
+    
+    # Approval flow (RBAC)
+    path('approvals/', views.ApproveListView.as_view(), name='approve_list'),
+    path('submissions/<int:submission_id>/approve/', views.ApproveSubmissionView.as_view(), name='approve_submission'),
+    
+    # Auth
+    path('login/', auth_views.LoginView.as_view(template_name='form_app/user/login.html', next_page='home', redirect_authenticated_user=True), name='login'),
+    path('logout/', auth_views.LogoutView.as_view(next_page='login'), name='logout'),
 ]

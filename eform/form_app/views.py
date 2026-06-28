@@ -1,15 +1,35 @@
 from django.contrib.admin.views.decorators import staff_member_required
-from django.shortcuts import render, get_object_or_404
+from django.shortcuts import render, get_object_or_404, redirect
 from django.utils.decorators import method_decorator
+from django.contrib.auth.decorators import login_required
+from django.contrib.auth.models import User
 from django.views import View
 from .models import FormDefinition, FormSubmission, FormDraft
 import json
 import uuid
 import os
 from django.conf import settings
-from django.http import JsonResponse
+from django.http import JsonResponse, HttpResponseForbidden
 from .minio_client import get_minio_client
 from datetime import timedelta
+from django.utils import timezone
+from django.core.mail import send_mail
+import threading
+
+def send_email_async(subject, message, recipient_list):
+    def send():
+        try:
+            send_mail(
+                subject,
+                message,
+                settings.EMAIL_HOST_USER,
+                recipient_list,
+                fail_silently=True,
+            )
+        except Exception as e:
+            print(f"Lỗi gửi email: {e}")
+    threading.Thread(target=send).start()
+
 
 def home_view(request):
     return render(request, "form_app/user/home.html")
@@ -19,39 +39,66 @@ def list_forms_view(request):
     forms = FormDefinition.objects.filter(is_active=True).order_by('-created_at')
     return render(request, 'form_app/user/list_form.html', {'forms': forms})
 
+@login_required
 def list_submitted_forms_views(request):
-    submissions = FormSubmission.objects.select_related('form_definition').order_by('-submitted_at')
+    # Người dùng thường chỉ xem đơn của chính mình, Admin/Checker/Manager được xem tất cả
+    is_checker = request.user.groups.filter(name='Checker').exists()
+    is_manager = request.user.groups.filter(name='Manager').exists()
+    
+    if request.user.is_superuser or is_checker or is_manager:
+        submissions = FormSubmission.objects.select_related('form_definition', 'user').order_by('-submitted_at')
+    else:
+        submissions = FormSubmission.objects.filter(user=request.user).select_related('form_definition').order_by('-submitted_at')
+        
     context = {
         'submissions': submissions
     }
     return render(request, 'form_app/user/list_submit_form.html', context)
 
+@login_required
 def detail_submit_form_view(request, submission_id):
-    # 1. Tìm bản ghi kết quả nộp dựa trên ID
     submission = get_object_or_404(FormSubmission, id=submission_id)
-    # 2. Lấy cấu trúc form gốc tương ứng
     form_def = submission.form_definition
+    
+    # Phân quyền xem đơn
+    is_checker = request.user.groups.filter(name='Checker').exists()
+    is_manager = request.user.groups.filter(name='Manager').exists()
+    is_owner = submission.user == request.user
+    
+    if not (request.user.is_superuser or is_checker or is_manager or is_owner):
+        return HttpResponseForbidden("Bạn không có quyền xem chi tiết biểu mẫu này.")
+        
     context = {
         'form_def': form_def,
         'submission': submission,
-        # Chuyển cấu trúc form và dữ liệu nhập thành chuỗi JSON an toàn cho JS
         'schema_json_str': json.dumps(form_def.schema_json),
         'submission_json_str': json.dumps(submission.data),
         'status': submission.status,
+        'is_checker': is_checker or request.user.is_superuser,
+        'is_manager': is_manager or request.user.is_superuser,
+        'is_owner': is_owner,
     }
     return render(request, 'form_app/user/detail_submit_form.html', context)
 
 
 class CancelSubmissionView(View):
-    """API xử lý hủy đơn đã nộp."""
+    """API xử lý hủy đơn đã nộp (Chỉ người nộp đơn được hủy khi đơn đang ở trạng thái Chờ Checker duyệt)."""
     def post(self, request, submission_id):
+        if not request.user.is_authenticated:
+            return JsonResponse({'status': 'error', 'message': 'Yêu cầu đăng nhập.'}, status=401)
+            
         submission = get_object_or_404(FormSubmission, id=submission_id)
-        if submission.status == 'submitted':
+        
+        # Chỉ chủ đơn mới được hủy và đơn phải đang ở trạng thái pending_checker
+        if submission.user != request.user and not request.user.is_superuser:
+            return JsonResponse({'status': 'error', 'message': 'Bạn không phải là người tạo đơn này.'}, status=403)
+            
+        if submission.status == 'pending_checker':
             submission.status = 'cancelled'
             submission.save()
             return JsonResponse({'status': 'success', 'message': 'Hủy đơn thành công!'})
-        return JsonResponse({'status': 'error', 'message': 'Đơn này không thể hủy hoặc đã được xử lý.'}, status=400)
-
+            
+        return JsonResponse({'status': 'error', 'message': 'Đơn này đã được duyệt hoặc xử lý, không thể hủy.'}, status=400)
 
 
 # ============================================================
@@ -105,17 +152,26 @@ class SubmitFormApiView(View):
             submission_data = body.get('data', body) if isinstance(body, dict) and 'data' in body else body
             draft_id = body.get('draft_id') if isinstance(body, dict) else None
 
-            # Lưu vào bảng FormSubmission
-            FormSubmission.objects.create(
+            # Lưu vào bảng FormSubmission với trạng thái chờ duyệt cấp 1 (pending_checker)
+            submission = FormSubmission.objects.create(
                 form_definition=form_def,
-                data=submission_data
+                data=submission_data,
+                user=request.user if request.user.is_authenticated else None,
+                status='pending_checker'
             )
 
             # Xóa bản nháp sau khi đã nộp chính thức thành công
             if draft_id:
                 FormDraft.objects.filter(id=draft_id, form_definition=form_def).delete()
+                
+            # --- Bắn email thông báo cho Checker ---
+            checker_emails = list(User.objects.filter(groups__name='Checker').exclude(email='').values_list('email', flat=True))
+            if checker_emails:
+                subject = f"[eForm] Có biểu mẫu mới cần kiểm duyệt: {form_def.title}"
+                msg = f"Xin chào Checker,\n\nBiểu mẫu '{form_def.title}' vừa được nộp bởi {request.user.username if request.user.is_authenticated else 'Ẩn danh'} và đang chờ bạn kiểm duyệt.\nVui lòng truy cập hệ thống để xử lý.\n\nMã đơn: #{submission.id}\n\nTrân trọng,\nHệ thống eForm."
+                send_email_async(subject, msg, checker_emails)
 
-            return JsonResponse({'status': 'success', 'message': 'Nộp biểu mẫu thành công!'})
+            return JsonResponse({'status': 'success', 'message': 'Nộp biểu mẫu thành công và đang chờ phê duyệt!'})
 
         except json.JSONDecodeError as e:
             return JsonResponse({'status': 'error', 'message': f'Dữ liệu JSON không hợp lệ: {str(e)}'}, status=400)
@@ -198,6 +254,118 @@ class DeleteDraftApiView(View):
         draft = get_object_or_404(FormDraft, id=draft_id, form_definition=form_def)
         draft.delete()
         return JsonResponse({'status': 'success', 'message': 'Đã xóa bản nháp.'})
+
+
+# ============================================================
+# RBAC APPROVAL SYSTEM VIEWS
+# ============================================================
+
+class ApproveListView(View):
+    """View hiển thị danh sách các đơn cần phê duyệt tùy theo quyền hạn của người đăng nhập."""
+    @method_decorator(login_required)
+    def get(self, request):
+        is_checker = request.user.groups.filter(name='Checker').exists()
+        is_manager = request.user.groups.filter(name='Manager').exists()
+        
+        submissions = []
+        
+        # Nếu là Superuser: Xem toàn bộ các đơn đang chờ duyệt
+        if request.user.is_superuser:
+            submissions = FormSubmission.objects.filter(
+                status__in=['pending_checker', 'pending_manager']
+            ).select_related('form_definition', 'user').order_by('-submitted_at')
+        else:
+            # Nếu là Manager: Xem các đơn đã được Checker duyệt qua (Chờ Manager duyệt)
+            if is_manager:
+                submissions = FormSubmission.objects.filter(
+                    status='pending_manager'
+                ).select_related('form_definition', 'user').order_by('-submitted_at')
+            # Nếu là Checker: Xem các đơn mới nộp (Chờ Checker duyệt)
+            elif is_checker:
+                submissions = FormSubmission.objects.filter(
+                    status='pending_checker'
+                ).select_related('form_definition', 'user').order_by('-submitted_at')
+                
+        context = {
+            'submissions': submissions,
+            'is_checker': is_checker,
+            'is_manager': is_manager,
+        }
+        return render(request, 'form_app/user/approve_list.html', context)
+
+
+class ApproveSubmissionView(View):
+    """API tiếp nhận quyết định duyệt (Approve/Reject) từ Checker và Manager."""
+    @method_decorator(login_required)
+    def post(self, request, submission_id):
+        submission = get_object_or_404(FormSubmission, id=submission_id)
+        is_checker = request.user.groups.filter(name='Checker').exists()
+        is_manager = request.user.groups.filter(name='Manager').exists()
+        
+        try:
+            body = json.loads(request.body)
+            action = body.get('action')  # 'approve' hoặc 'reject'
+            comment = body.get('comment', '').trim() if body.get('comment') else ''
+        except json.JSONDecodeError:
+            return JsonResponse({'status': 'error', 'message': 'Dữ liệu gửi lên không đúng định dạng.'}, status=400)
+            
+        if not action in ['approve', 'reject']:
+            return JsonResponse({'status': 'error', 'message': 'Hành động không hợp lệ.'}, status=400)
+
+        # 1. Xử lý cấp duyệt của Checker (Cấp 1)
+        if submission.status == 'pending_checker':
+            if not (is_checker or request.user.is_superuser):
+                return JsonResponse({'status': 'error', 'message': 'Bạn không có quyền duyệt cấp này (Checker).'}, status=403)
+                
+            if action == 'approve':
+                submission.status = 'pending_manager' # Chuyển lên cho Manager duyệt
+                # Bắn email cho Manager
+                manager_emails = list(User.objects.filter(groups__name='Manager').exclude(email='').values_list('email', flat=True))
+                if manager_emails:
+                    subject = f"[eForm] Đơn #{submission.id} cần Manager phê duyệt"
+                    msg = f"Xin chào Manager,\n\nBiểu mẫu '{submission.form_definition.title}' (Mã đơn: #{submission.id}) đã được Checker ({request.user.username}) đồng ý và đang chờ bạn phê duyệt cuối cùng.\n\nÝ kiến Checker: {comment}\n\nVui lòng đăng nhập hệ thống để xử lý.\n\nTrân trọng,\nHệ thống eForm."
+                    send_email_async(subject, msg, manager_emails)
+            else:
+                submission.status = 'rejected'
+                # Bắn email báo từ chối cho người nộp
+                if submission.user and submission.user.email:
+                    subject = f"[eForm] Biểu mẫu #{submission.id} đã bị từ chối"
+                    msg = f"Xin chào {submission.user.username},\n\nRất tiếc, biểu mẫu '{submission.form_definition.title}' của bạn đã bị từ chối bởi Checker ({request.user.username}).\n\nLý do/Ý kiến: {comment}\n\nTrân trọng,\nHệ thống eForm."
+                    send_email_async(subject, msg, [submission.user.email])
+                
+            submission.checked_by = request.user
+            submission.checked_at = timezone.now()
+            submission.checker_comment = comment
+            submission.save()
+            return JsonResponse({'status': 'success', 'message': 'Đã cập nhật quyết định duyệt của Checker.'})
+            
+        # 2. Xử lý cấp duyệt của Manager (Cấp 2)
+        elif submission.status == 'pending_manager':
+            if not (is_manager or request.user.is_superuser):
+                return JsonResponse({'status': 'error', 'message': 'Bạn không có quyền phê duyệt cấp này (Manager).'}, status=403)
+                
+            if action == 'approve':
+                submission.status = 'approved' # Đã duyệt hoàn toàn
+                # Bắn email báo thành công cho người nộp
+                if submission.user and submission.user.email:
+                    subject = f"[eForm] Xin chúc mừng, biểu mẫu #{submission.id} đã được phê duyệt"
+                    msg = f"Xin chào {submission.user.username},\n\nBiểu mẫu '{submission.form_definition.title}' của bạn đã được phê duyệt hoàn tất bởi Manager ({request.user.username}).\n\nÝ kiến Manager: {comment}\n\nTrân trọng,\nHệ thống eForm."
+                    send_email_async(subject, msg, [submission.user.email])
+            else:
+                submission.status = 'rejected'
+                # Bắn email báo từ chối cho người nộp
+                if submission.user and submission.user.email:
+                    subject = f"[eForm] Biểu mẫu #{submission.id} đã bị từ chối"
+                    msg = f"Xin chào {submission.user.username},\n\nRất tiếc, biểu mẫu '{submission.form_definition.title}' của bạn đã bị từ chối bởi Manager ({request.user.username}).\n\nLý do/Ý kiến: {comment}\n\nTrân trọng,\nHệ thống eForm."
+                    send_email_async(subject, msg, [submission.user.email])
+                
+            submission.approved_by = request.user
+            submission.approved_at = timezone.now()
+            submission.manager_comment = comment
+            submission.save()
+            return JsonResponse({'status': 'success', 'message': 'Đã cập nhật quyết định phê duyệt của Manager.'})
+            
+        return JsonResponse({'status': 'error', 'message': 'Đơn này đang không ở trạng thái chờ duyệt.'}, status=400)
 
 
 @staff_member_required
