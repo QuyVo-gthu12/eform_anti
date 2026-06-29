@@ -33,7 +33,10 @@ class FormSubmission(models.Model):
         ('pending_manager', 'Chờ Manager duyệt'),
         ('approved', 'Đã phê duyệt'),
         ('rejected', 'Bị từ chối'),
-        ('cancelled', 'Đã hủy'),
+        ('cancelled', 'Đã hủy (Lúc chưa duyệt)'),
+        ('pending_cancel_checker', 'Xin hủy - Chờ Checker'),
+        ('pending_cancel_manager', 'Xin hủy - Chờ Manager'),
+        ('revoked', 'Tài liệu đã hủy'),
     ]
     form_definition = models.ForeignKey(
         FormDefinition,
@@ -49,7 +52,7 @@ class FormSubmission(models.Model):
     data = models.JSONField()
     submitted_at = models.DateTimeField(auto_now_add=True)
     status = models.CharField(
-        max_length=20,
+        max_length=50,
         choices=STATUS_CHOICES,
         default='pending_checker'
     )

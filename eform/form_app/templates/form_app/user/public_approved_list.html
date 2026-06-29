@@ -1,0 +1,150 @@
+{% extends "form_app/user/base.html" %}
+{% load static %}
+
+{% block title %}Tài liệu đã duyệt - eForm{% endblock %}
+{% block page_title %}Danh sách Tài liệu / Biểu mẫu đã duyệt{% endblock %}
+
+{% block content %}
+<style>
+    .table-container {
+        margin-top: 10px;
+        overflow-x: auto;
+    }
+
+    .custom-table {
+        width: 100%;
+        border-collapse: collapse;
+        text-align: left;
+        font-size: 14px;
+    }
+
+    .custom-table th {
+        background: #f8fafc;
+        color: #64748b;
+        padding: 14px 16px;
+        font-weight: 600;
+        border-bottom: 2px solid #e2e8f0;
+        text-transform: uppercase;
+        font-size: 12px;
+        letter-spacing: 0.5px;
+    }
+
+    .custom-table td {
+        padding: 14px 16px;
+        color: #334155;
+        border-bottom: 1px solid #e2e8f0;
+    }
+
+    .custom-table tr:hover td {
+        background: #f8fafc;
+    }
+
+    .badge-time {
+        display: inline-block;
+        background: #f1f5f9;
+        color: #475569;
+        padding: 4px 8px;
+        border-radius: 4px;
+        font-size: 12px;
+        font-weight: 500;
+    }
+
+    /* Nhãn trạng thái */
+    .status-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        padding: 4px 10px;
+        border-radius: 20px;
+        font-size: 12px;
+        font-weight: 600;
+    }
+    .status-badge.status-approved {
+        background-color: #ecfdf5;
+        color: #047857;
+        border: 1px solid #a7f3d0;
+    }
+
+    .btn-view-detail {
+        display: inline-block;
+        background: #f1f5f9;
+        color: #1e293b;
+        text-decoration: none;
+        padding: 6px 12px;
+        border-radius: 6px;
+        font-size: 13px;
+        font-weight: 600;
+        border: 1px solid #cbd5e1;
+        transition: 0.2s;
+    }
+
+    .btn-view-detail:hover {
+        background: #e2e8f0;
+        color: #0f172a;
+    }
+
+    .empty-submission {
+        text-align: center;
+        padding: 40px;
+        color: #64748b;
+    }
+</style>
+
+<div class="card">
+    <div class="table-container">
+        {% if submissions %}
+            <table class="custom-table">
+                <thead>
+                    <tr>
+                        <th style="width: 80px;">STT</th>
+                        <th>Tên biểu mẫu</th>
+                        <th>Người nộp</th>
+                        <th>Thời gian duyệt</th>
+                        <th>Trạng thái</th>
+                        <th>Thao tác</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for submission in submissions %}
+                        <tr>
+                            <td><strong>{{ forloop.counter }}</strong></td>
+                            
+                            <td style="font-weight: 600; color: #1e293b;">
+                                {{ submission.form_definition.title }}
+                            </td>
+
+                            <td>
+                                {{ submission.user.username|default:"Ẩn danh" }}
+                            </td>
+                            
+                            <td>
+                                <span class="badge-time">
+                                    {{ submission.approved_at|date:"d/m/Y H:i:s" }}
+                                </span>
+                            </td>
+
+                            <td>
+                                <span class="status-badge status-approved">
+                                    <i class="fa fa-check-circle"></i> Đã duyệt
+                                </span>
+                            </td>
+                            
+                            <td>
+                                <a href="{% url 'detail_submit_form' submission.id %}" class="btn-view-detail">
+                                    <i class="fa fa-eye"></i> Xem tài liệu
+                                </a>
+                            </td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        {% else %}
+            <div class="empty-submission">
+                <i class="fa fa-folder-open-o" style="font-size: 48px; color: #cbd5e1; margin-bottom: 16px;"></i>
+                <h3>Chưa có tài liệu nào được duyệt hoàn toàn</h3>
+                <p style="margin-top: 5px;">Các biểu mẫu sau khi được Manager phê duyệt sẽ xuất hiện công khai tại đây.</p>
+            </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

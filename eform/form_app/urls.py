@@ -23,6 +23,10 @@ urlpatterns = [
     path('submissions/', views.list_submitted_forms_views, name='list_submissions'),
     path('submissions/<int:submission_id>/detail/', views.detail_submit_form_view, name='detail_submit_form'),
     path('submissions/<int:submission_id>/cancel/', views.CancelSubmissionView.as_view(), name='cancel_submission'),
+    path('submissions/<int:submission_id>/request-revoke/', views.RequestRevokeApiView.as_view(), name='request_revoke'),
+    
+    # Public Approved Forms
+    path('public-approved/', views.PublicApprovedFormsView.as_view(), name='public_approved_list'),
     
     # Approval flow (RBAC)
     path('approvals/', views.ApproveListView.as_view(), name='approve_list'),

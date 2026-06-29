@@ -65,7 +65,8 @@ def detail_submit_form_view(request, submission_id):
     is_manager = request.user.groups.filter(name='Manager').exists()
     is_owner = submission.user == request.user
     
-    if not (request.user.is_superuser or is_checker or is_manager or is_owner):
+    # Cho phép xem nếu là owner, checker, manager, admin HOẶC đơn đã được duyệt hoàn toàn (public nội bộ)
+    if not (request.user.is_superuser or is_checker or is_manager or is_owner or submission.status == 'approved'):
         return HttpResponseForbidden("Bạn không có quyền xem chi tiết biểu mẫu này.")
         
     context = {
@@ -257,11 +258,30 @@ class DeleteDraftApiView(View):
 
 
 # ============================================================
+# PUBLIC APPROVED FORMS VIEW
+# ============================================================
+
+class PublicApprovedFormsView(View):
+    """View hiển thị danh sách các biểu mẫu đã được phê duyệt thành công cho tất cả người dùng."""
+    @method_decorator(login_required)
+    def get(self, request):
+        # Lấy tất cả các đơn có status = 'approved', 'pending_cancel_checker', 'pending_cancel_manager', 'revoked'
+        submissions = FormSubmission.objects.filter(
+            status__in=['approved', 'pending_cancel_checker', 'pending_cancel_manager', 'revoked']
+        ).select_related('form_definition', 'user').order_by('-approved_at')
+        
+        context = {
+            'submissions': submissions
+        }
+        return render(request, 'form_app/user/public_approved_list.html', context)
+
+
+# ============================================================
 # RBAC APPROVAL SYSTEM VIEWS
 # ============================================================
 
 class ApproveListView(View):
-    """View hiển thị danh sách các đơn cần phê duyệt tùy theo quyền hạn của người đăng nhập."""
+    """View hiển thị danh sách các đơn cần phê duyệt hoặc cần hủy tùy theo quyền hạn của người đăng nhập."""
     @method_decorator(login_required)
     def get(self, request):
         is_checker = request.user.groups.filter(name='Checker').exists()
@@ -269,21 +289,19 @@ class ApproveListView(View):
         
         submissions = []
         
-        # Nếu là Superuser: Xem toàn bộ các đơn đang chờ duyệt
+        # Nếu là Superuser: Xem toàn bộ các đơn đang chờ duyệt và xin hủy
         if request.user.is_superuser:
             submissions = FormSubmission.objects.filter(
-                status__in=['pending_checker', 'pending_manager']
+                status__in=['pending_checker', 'pending_manager', 'pending_cancel_checker', 'pending_cancel_manager']
             ).select_related('form_definition', 'user').order_by('-submitted_at')
         else:
-            # Nếu là Manager: Xem các đơn đã được Checker duyệt qua (Chờ Manager duyệt)
             if is_manager:
                 submissions = FormSubmission.objects.filter(
-                    status='pending_manager'
+                    status__in=['pending_manager', 'pending_cancel_manager']
                 ).select_related('form_definition', 'user').order_by('-submitted_at')
-            # Nếu là Checker: Xem các đơn mới nộp (Chờ Checker duyệt)
             elif is_checker:
                 submissions = FormSubmission.objects.filter(
-                    status='pending_checker'
+                    status__in=['pending_checker', 'pending_cancel_checker']
                 ).select_related('form_definition', 'user').order_by('-submitted_at')
                 
         context = {
@@ -365,7 +383,60 @@ class ApproveSubmissionView(View):
             submission.save()
             return JsonResponse({'status': 'success', 'message': 'Đã cập nhật quyết định phê duyệt của Manager.'})
             
+        # 3. Xử lý cấp duyệt HỦY của Checker (Cấp 1)
+        elif submission.status == 'pending_cancel_checker':
+            if not (is_checker or request.user.is_superuser):
+                return JsonResponse({'status': 'error', 'message': 'Bạn không có quyền duyệt cấp này.'}, status=403)
+                
+            if action == 'approve':
+                submission.status = 'pending_cancel_manager' # Chuyển lên Manager duyệt hủy
+            else:
+                submission.status = 'approved' # Từ chối hủy thì quay về trạng thái đã duyệt
+                
+            submission.checked_by = request.user
+            submission.checked_at = timezone.now()
+            submission.checker_comment = f"Về việc xin hủy: {comment}"
+            submission.save()
+            return JsonResponse({'status': 'success', 'message': 'Đã xử lý yêu cầu xin hủy của Checker.'})
+            
+        # 4. Xử lý cấp duyệt HỦY của Manager (Cấp 2)
+        elif submission.status == 'pending_cancel_manager':
+            if not (is_manager or request.user.is_superuser):
+                return JsonResponse({'status': 'error', 'message': 'Bạn không có quyền duyệt cấp này.'}, status=403)
+                
+            if action == 'approve':
+                submission.status = 'revoked' # Hủy thành công
+            else:
+                submission.status = 'approved' # Từ chối hủy thì quay về đã duyệt
+                
+            submission.approved_by = request.user
+            submission.approved_at = timezone.now()
+            submission.manager_comment = f"Về việc xin hủy: {comment}"
+            submission.save()
+            return JsonResponse({'status': 'success', 'message': 'Đã xử lý yêu cầu xin hủy của Manager.'})
+            
         return JsonResponse({'status': 'error', 'message': 'Đơn này đang không ở trạng thái chờ duyệt.'}, status=400)
+
+
+class RequestRevokeApiView(View):
+    """API cho phép chủ đơn xin hủy biểu mẫu đã được duyệt."""
+    @method_decorator(login_required)
+    def post(self, request, submission_id):
+        submission = get_object_or_404(FormSubmission, id=submission_id)
+        if submission.user != request.user and not request.user.is_superuser:
+            return JsonResponse({'status': 'error', 'message': 'Chỉ người nộp mới được xin hủy đơn này.'}, status=403)
+            
+        if submission.status != 'approved':
+            return JsonResponse({'status': 'error', 'message': 'Chỉ có thể xin hủy những đơn đã được duyệt hoàn toàn.'}, status=400)
+            
+        submission.status = 'pending_cancel_checker'
+        # Reset ý kiến cũ để dành cho việc duyệt hủy
+        submission.checker_comment = ''
+        submission.manager_comment = ''
+        submission.checked_by = None
+        submission.approved_by = None
+        submission.save()
+        return JsonResponse({'status': 'success', 'message': 'Đã gửi yêu cầu xin hủy biểu mẫu tới Checker.'})
 
 
 @staff_member_required

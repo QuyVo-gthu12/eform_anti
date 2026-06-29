@@ -332,12 +332,22 @@
 {% if submission.status == 'cancelled' %}
     <div class="cancelled-banner">
         <i class="fa fa-exclamation-triangle"></i>
-        <span>Biểu mẫu này đã bị hủy bỏ bởi người nộp đơn.</span>
+        <span>Biểu mẫu này đã bị hủy bỏ từ lúc chưa duyệt.</span>
     </div>
 {% elif submission.status == 'rejected' %}
     <div class="cancelled-banner">
         <i class="fa fa-times-circle" style="color: #ef4444;"></i>
         <span>Biểu mẫu này đã bị từ chối phê duyệt.</span>
+    </div>
+{% elif submission.status == 'revoked' %}
+    <div class="cancelled-banner">
+        <i class="fa fa-ban" style="color: #ef4444;"></i>
+        <span>TÀI LIỆU ĐÃ HỦY (Do dữ liệu đã cũ hoặc không còn giá trị).</span>
+    </div>
+{% elif submission.status == 'pending_cancel_checker' or submission.status == 'pending_cancel_manager' %}
+    <div class="cancelled-banner" style="background: linear-gradient(135deg, #fffbeb, #fef3c7); border-color: #fde68a; color: #92400e;">
+        <i class="fa fa-clock-o" style="color: #d97706;"></i>
+        <span>Tài liệu này đang trong quá trình xin phê duyệt HỦY bỏ.</span>
     </div>
 {% endif %}
 
@@ -421,7 +431,7 @@
         <span class="ml-4">
             <i class="fa fa-info-circle"></i> <strong>Trạng thái:</strong> 
             {% if submission.status == 'cancelled' %}
-                <span class="text-danger font-weight-bold">Đã hủy</span>
+                <span class="text-danger font-weight-bold">Đã hủy (Lúc chưa duyệt)</span>
             {% elif submission.status == 'rejected' %}
                 <span class="text-danger font-weight-bold">Bị từ chối</span>
             {% elif submission.status == 'pending_checker' %}
@@ -430,6 +440,10 @@
                 <span class="text-warning font-weight-bold">Chờ Manager duyệt</span>
             {% elif submission.status == 'approved' %}
                 <span class="text-success font-weight-bold">Đã phê duyệt</span>
+            {% elif submission.status == 'pending_cancel_checker' or submission.status == 'pending_cancel_manager' %}
+                <span class="text-warning font-weight-bold">Đang xin hủy tài liệu</span>
+            {% elif submission.status == 'revoked' %}
+                <span class="text-danger font-weight-bold">Tài liệu đã hủy</span>
             {% endif %}
         </span>
     </div>
@@ -441,11 +455,18 @@
                 <i class="fa fa-ban"></i> Hủy đơn này
             </button>
         </div>
+    {% elif submission.status == 'approved' and is_owner %}
+        <!-- Nút Xin Hủy Tài Liệu cho chủ đơn khi đã duyệt -->
+        <div>
+            <button type="button" class="btn-cancel-submission" style="background-color: #f59e0b; color: white;" onclick="requestRevokeSubmission({{ submission.id }})">
+                <i class="fa fa-history"></i> Xin hủy tài liệu (Dữ liệu cũ)
+            </button>
+        </div>
     {% endif %}
 </div>
 
 <!-- Khung chứa Form -->
-<div class="card {% if submission.status == 'cancelled' or submission.status == 'rejected' %}cancelled-form-style{% elif submission.status == 'approved' %}approved-form-style{% endif %}">
+<div class="card {% if submission.status == 'cancelled' or submission.status == 'rejected' or submission.status == 'revoked' %}cancelled-form-style{% elif submission.status == 'approved' %}approved-form-style{% endif %}">
     <div class="loading-overlay" id="loading-screen">
         <div class="spinner-ring"></div>
         <div class="loading-text">Đang tải và kết xuất dữ liệu biểu mẫu...</div>
@@ -481,6 +502,34 @@
             </button>
             <button class="btn-reject-action" onclick="submitApproval('reject')">
                 <i class="fa fa-times"></i> Từ chối đơn
+            </button>
+        </div>
+    </div>
+{% elif submission.status == 'pending_cancel_checker' and is_checker %}
+    <!-- Checker phê duyệt HỦY cấp 1 -->
+    <div class="approval-action-card" style="border-color: #fde68a;">
+        <div class="approval-action-title" style="color: #d97706;"><i class="fa fa-gavel"></i> Xét duyệt Yêu cầu HỦY Tài Liệu (Checker)</div>
+        <textarea id="approval-comment" class="comment-textarea" placeholder="Nhập ý kiến xử lý yêu cầu hủy..."></textarea>
+        <div class="action-buttons-group">
+            <button class="btn-approve-action" style="background: #d97706;" onclick="submitApproval('approve')">
+                <i class="fa fa-check"></i> Đồng ý hủy (Chuyển Manager)
+            </button>
+            <button class="btn-reject-action" onclick="submitApproval('reject')">
+                <i class="fa fa-times"></i> Không cho hủy (Giữ nguyên)
+            </button>
+        </div>
+    </div>
+{% elif submission.status == 'pending_cancel_manager' and is_manager %}
+    <!-- Manager phê duyệt HỦY cấp 2 -->
+    <div class="approval-action-card manager-border" style="border-color: #fca5a5;">
+        <div class="approval-action-title" style="color: #dc2626;"><i class="fa fa-gavel"></i> Quyết định HỦY Tài Liệu (Manager)</div>
+        <textarea id="approval-comment" class="comment-textarea" placeholder="Nhập ý kiến quyết định..."></textarea>
+        <div class="action-buttons-group">
+            <button class="btn-approve-action" style="background: #dc2626;" onclick="submitApproval('approve')">
+                <i class="fa fa-ban"></i> Chấp nhận HỦY hoàn toàn
+            </button>
+            <button class="btn-reject-action" style="background: #4b5563;" onclick="submitApproval('reject')">
+                <i class="fa fa-times"></i> Không cho hủy (Giữ nguyên)
             </button>
         </div>
     </div>
@@ -531,6 +580,30 @@
             }
         } catch (err) {
             console.error('Lỗi khi hủy đơn:', err);
+            showNotification('Có lỗi kết nối tới máy chủ.', 'error');
+        }
+    }
+
+    async function requestRevokeSubmission(submissionId) {
+        if (!confirm('Tài liệu này đã được duyệt. Bạn có chắc chắn muốn XIN HỦY tài liệu này không? (Cần ban kiểm duyệt đồng ý)')) return;
+        
+        try {
+            const response = await fetch(`/submissions/${submissionId}/request-revoke/`, {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': '{{ csrf_token }}',
+                    'Content-Type': 'application/json'
+                }
+            });
+            const result = await response.json();
+            if (result.status === 'success') {
+                showNotification('Đã gửi yêu cầu xin hủy thành công!', 'success');
+                setTimeout(() => { window.location.reload(); }, 1500);
+            } else {
+                showNotification(result.message || 'Xin hủy thất bại.', 'error');
+            }
+        } catch (err) {
+            console.error('Lỗi khi xin hủy đơn:', err);
             showNotification('Có lỗi kết nối tới máy chủ.', 'error');
         }
     }
